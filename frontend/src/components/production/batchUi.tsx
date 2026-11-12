@@ -11,7 +11,7 @@ export function formatTonnes(kg: number): string {
 }
 
 export function BatchStatusPill({ status }: { status: BatchStatus }) {
-  return <Pill tone={status === "in_process" ? "term" : "system"} label={BATCH_STATUS_LABELS[status]} />;
+  return <Pill tone={status === "in_process" ? "term" : status === "closed" ? "entry" : "system"} label={BATCH_STATUS_LABELS[status]} />;
 }
 
 /** Amber waits on someone, red went wrong (On hold), green is moving on or done. */
@@ -59,9 +59,9 @@ export const PRODUCTION_STAGES = [
   { id: "cooking", label: "Cooking", built: true, sheets: "6. Cooking Process Report", text: "Steam-cook the nuts size by size to make a Lot, then rest the Lot 24 hours in a cooling silo." },
   { id: "shelling", label: "Shelling", built: true, sheets: "7. Shelling process Report · 13. Shelling Machine Quality Reports", text: "Cut the shells open and record what comes out: kernels, uncut nuts, shell and shell dust." },
   { id: "colour_sort", label: "Colour sorting", built: true, sheets: "12. Shelled Kernels Quality Report", text: "A camera machine splits the kernels into wholes, pieces, rejection + oil and black rejection. Check the sorter before and after." },
-  { id: "borma", label: "Borma ovens", built: false, sheets: "8. Borma Process Report", text: "Dry the kernels in the ovens, trolley by trolley." },
-  { id: "peeling", label: "Peeling & grading", built: false, sheets: "", text: "Humidify, peel and grade the kernels." },
-  { id: "packing", label: "Packing & dispatch", built: false, sheets: "", text: "Pack, check and dispatch the finished goods." },
+  { id: "borma", label: "Borma ovens", built: true, sheets: "18. Borma Loss Tally Sheet · 20. Borma Machine Monitoring report · 14. Final Output Analysis Report (8. Borma Process Report is worked out)", text: "Dry the kernels in the ovens, trolley by trolley: weigh each trolley before and after, log the oven run, check the quality (QC-8) and send each trolley on." },
+  { id: "peeling", label: "Peeling & grading", built: true, sheets: "Manual Peeling Individual performance", text: "Humidify the kernels the Borma sent to peeling, peel them, winnow the husk and grade what comes out. Two checks: QC-10 and QC-12." },
+  { id: "packing", label: "Packing & dispatch", built: true, sheets: "Packing Traceability FG Aging Report", text: "Pack each grade into pouches, check before filling (QC-9) and the finished goods (QC-11), dispatch against a contract, then close the run." },
 ] as const;
 
 export type ProductionStageId = (typeof PRODUCTION_STAGES)[number]["id"];

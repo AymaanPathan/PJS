@@ -44,17 +44,17 @@ datasource db {
 // curated whitelist. Dropping an unmatched row would be discarding real client data.
 
 model Supplier {
-  code   String  @id
+  code         String  @id
   /// Stored without the leading "RCN" the workbooks carry (contract domain/supplierCode.ts).
-  name   String
+  name         String
   /// The name exactly as the source had it, kept only when "RCN" was dropped, so a workbook that still
   /// says "RCN SCOOPS DIENE" can be matched and the change can be undone.
-  formerName String?
+  formerName   String?
   /// Where this code was first observed, e.g. "seed/suppliers.json" or a workbook name.
-  source String?
+  source       String?
   /// The permanent system ID (SUP-0001). Issued by the database from a sequence, so every writer — the app, the
   /// seeder, an Excel upload — gets one without knowing about it, and it never changes even if the LBA code does.
-  supplierNo String @unique @default(dbgenerated("('SUP-'::text || lpad((nextval('supplier_no_seq'::regclass))::text, 4, '0'::text))"))
+  supplierNo   String  @unique @default(dbgenerated("('SUP-'::text || lpad((nextval('supplier_no_seq'::regclass))::text, 4, '0'::text))"))
   /// "active" | "inactive" | "suspended" (contract domain/supplierProfile.ts). Inactive suppliers leave the pickers;
   /// suspended ones stay, with a warning. A supplier already used by trucks, plans or jute movements is made inactive
   /// rather than deleted, so its history stays whole.
@@ -123,18 +123,18 @@ model Warehouse {
   siteRef Warehouse?  @relation("WarehouseSite", fields: [site], references: [name])
   stores  Warehouse[] @relation("WarehouseSite")
 
-  receipts      Receipt[]
-  deliveryPlans DeliveryPlan[]                 @relation("DeliveryPlanSite")
-  planStores    DeliveryPlan[]                 @relation("DeliveryPlanStore")
-  transfersFrom TransferRequest[]              @relation("TransferRequestFrom")
-  transfersTo   TransferRequest[]              @relation("TransferRequestTo")
-  dryingJobs    DryingJob[]
-  juteMovements JuteWarehouseMovement[]
-  emptyBagsSent JuteEmptyBagReceipt[]
-  transfersOut  JuteWarehouseTransferReceipt[] @relation("TransferSource")
-  transfersIn   JuteWarehouseTransferReceipt[] @relation("TransferDestination")
-  aliases       WarehouseAlias[]
-  users         User[]
+  receipts          Receipt[]
+  deliveryPlans     DeliveryPlan[]                 @relation("DeliveryPlanSite")
+  planStores        DeliveryPlan[]                 @relation("DeliveryPlanStore")
+  transfersFrom     TransferRequest[]              @relation("TransferRequestFrom")
+  transfersTo       TransferRequest[]              @relation("TransferRequestTo")
+  dryingJobs        DryingJob[]
+  juteMovements     JuteWarehouseMovement[]
+  emptyBagsSent     JuteEmptyBagReceipt[]
+  transfersOut      JuteWarehouseTransferReceipt[] @relation("TransferSource")
+  transfersIn       JuteWarehouseTransferReceipt[] @relation("TransferDestination")
+  aliases           WarehouseAlias[]
+  users             User[]
   productionBatches ProductionBatch[]
   truckMovements    TruckMovement[]
   boilerReadings    BoilerReading[]
@@ -147,7 +147,7 @@ model Warehouse {
 /// Bin.warehouseName stays NULL where the source data doesn't say — the real workbooks never map
 /// bin -> warehouse, and inventing that mapping is exactly what ground rule §4 forbids.
 model Bin {
-  code          String  @id
+  code          String               @id
   /// The store (a warehouse row with a site) the Bin is in. NULL on Bins that came from the workbooks, which never said.
   warehouseName String?
   source        String?
@@ -208,7 +208,7 @@ model Receipt {
   /// blocks the reception itself.
   exceptionApprovedAt DateTime?
   exceptionApprovedBy String?
-  exceptionApprover   User?     @relation("ExceptionApprover", fields: [exceptionApprovedBy], references: [id])
+  exceptionApprover   User?         @relation("ExceptionApprover", fields: [exceptionApprovedBy], references: [id])
   uploadIssues        UploadIssue[]
   exceptionNote       String?
 
@@ -335,18 +335,18 @@ model TransferRequest {
   /// One BKT is one truck / voyage (client, Oct 2026): the truck is on the header, and a truck loading
   /// from several Bins is several LINES under the one BKT. The workbook's own 2026 data breaks this in
   /// places (one voyage on two trucks); that is reported by the audit, not corrected.
-  truckNo           String?
-  transporter       String?
-  driver            String?
-  driverPhone       String?
+  truckNo             String?
+  transporter         String?
+  driver              String?
+  driverPhone         String?
   /// What leaves Bouaké: the loaded truck's weight at the dispatch scale (RCN + bags).
-  dispatchedGrossKg Decimal?
+  dispatchedGrossKg   Decimal?
   /// The warehouse receipt number the dispatch is recorded against, and the one the receiving warehouse records on arrival.
   dispatchWhReceiptNo String?
   receiveWhReceiptNo  String?
-  dispatchedAt      DateTime?
-  dispatchedBy      String?
-  dispatcher        User?     @relation("TransferDispatcher", fields: [dispatchedBy], references: [id])
+  dispatchedAt        DateTime?
+  dispatchedBy        String?
+  dispatcher          User?     @relation("TransferDispatcher", fields: [dispatchedBy], references: [id])
 
   /// What arrives — entered by the RECEIVING warehouse only, on arrival, and blank until then. Nothing
   /// here is pre-filled at dispatch: the variance is the comparison between the two sides.
@@ -375,21 +375,21 @@ model TransferRequest {
 /// One Lot on a transfer. The Lot, supplier and fiche are read from the receipt, not retyped; bags
 /// and weight are what is actually sent, which can be less than the whole Lot.
 model TransferRequestLine {
-  id          Int             @id @default(autoincrement())
-  transferId  String
-  transfer    TransferRequest @relation(fields: [transferId], references: [id], onDelete: Cascade)
-  receiptId   String
-  receipt     Receipt         @relation(fields: [receiptId], references: [id])
-  bags        Int?
-  netWeightKg Decimal?
+  id              Int             @id @default(autoincrement())
+  transferId      String
+  transfer        TransferRequest @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  receiptId       String
+  receipt         Receipt         @relation(fields: [receiptId], references: [id])
+  bags            Int?
+  netWeightKg     Decimal?
   /// Quality of this Lot as dispatched (client review, Oct 2026). Defaults to the Lot's own quality check and can be
   /// re-measured at dispatch; required to dispatch.
-  moisture    Decimal?
-  kor         Decimal?
-  nutCount    Int?
+  moisture        Decimal?
+  kor             Decimal?
+  nutCount        Int?
   /// Where the Lot was loaded from — its Bin(s) when it was added. A record, so a BKT that loads one
   /// truck from several Bins shows them all.
-  binCode     String?
+  binCode         String?
   /// The RECEIVING site's bin the Lot was unloaded into ("BIN NO." on the client's Bouake RCN Receiving at
   /// Factory sheet). Entered on arrival only; it is what puts the Lot in that site's bin stock for production.
   receivedBinCode String?
@@ -592,22 +592,22 @@ model StageBinAllocation {
 /// Stage n-unload (entry) — Unload RCN at warehouse
 /// Source: ANAGROCI DATA PROCUREMENT 2026.xlsx · Truck Reception · 28 columns
 model StageUnload {
-  receiptId           String   @id
-  dateOfOffloading    String? /// DATE OF OFFLOADING
-  sacs                String? /// SACS (bags)
-  bonSacs             String? /// BON SACS (good bags)
-  humidSacs           String? /// HUMID SACS (damp bags)
-  sacsDechires        String? /// Sacs déchirés (torn bags)
-  refraction          String? /// Refraction
-  manpowerContractor  String? /// Manpower contractor / team
-  tallyClerkBagCount  String? /// Tally Clerk bag count
-  palletsUsed         String? /// Pallets used (30 bags/pallet)
-  sacsNum             Decimal? /// typed shadow of sacs, for reporting/DQ only — never round-tripped
-  bonSacsNum          Decimal? /// typed shadow of bonSacs, for reporting/DQ only — never round-tripped
-  humidSacsNum        Decimal? /// typed shadow of humidSacs, for reporting/DQ only — never round-tripped
-  sacsDechiresNum     Decimal? /// typed shadow of sacsDechires, for reporting/DQ only — never round-tripped
-  refractionNum       Decimal? /// typed shadow of refraction, for reporting/DQ only — never round-tripped
-  receipt             Receipt  @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  receiptId          String   @id
+  dateOfOffloading   String? /// DATE OF OFFLOADING
+  sacs               String? /// SACS (bags)
+  bonSacs            String? /// BON SACS (good bags)
+  humidSacs          String? /// HUMID SACS (damp bags)
+  sacsDechires       String? /// Sacs déchirés (torn bags)
+  refraction         String? /// Refraction
+  manpowerContractor String? /// Manpower contractor / team
+  tallyClerkBagCount String? /// Tally Clerk bag count
+  palletsUsed        String? /// Pallets used (30 bags/pallet)
+  sacsNum            Decimal? /// typed shadow of sacs, for reporting/DQ only — never round-tripped
+  bonSacsNum         Decimal? /// typed shadow of bonSacs, for reporting/DQ only — never round-tripped
+  humidSacsNum       Decimal? /// typed shadow of humidSacs, for reporting/DQ only — never round-tripped
+  sacsDechiresNum    Decimal? /// typed shadow of sacsDechires, for reporting/DQ only — never round-tripped
+  refractionNum      Decimal? /// typed shadow of refraction, for reporting/DQ only — never round-tripped
+  receipt            Receipt  @relation(fields: [receiptId], references: [id], onDelete: Cascade)
 }
 
 /// Stage n-netwt (system) — Calculate net weight
@@ -766,11 +766,11 @@ model JuteWarehouseMovement {
   receiptId String?
 
   /// Set when this row came from the Vendor Receiving tab.
-  vendorReceipt JuteVendorReceipt?
+  vendorReceipt   JuteVendorReceipt?
   /// Set when this row came from the Empty Bag Receiving tab.
   emptyBagReceipt JuteEmptyBagReceipt?
   /// Set on a warehouse's opening balance row.
-  openingBalance JuteOpeningBalance?
+  openingBalance  JuteOpeningBalance?
 
   createdAt DateTime @default(now())
 
@@ -1375,8 +1375,8 @@ model DryingBatch {
   /// In-app sun drying (Oct 2026): a Lot is dried in rounds. Round 1 is the first issue; a quality check that sends the Lot back
   /// opens the next round, which points at the first through firstBatchId. Status: IN DRYING → QUALITY CHECK → PASSED | RE-DRY
   /// (contract domain/sunDrying.ts). Imported workbook rows leave all of these null.
-  round        Int?
-  firstBatchId String?
+  round             Int?
+  firstBatchId      String?
   /// The drying sample's cut test (grams of a 1000 g sample) before the round and after it. The QFS reception sample is a
   /// separate measurement and is never copied here.
   inputGoodKernelG  Decimal?
@@ -2367,11 +2367,16 @@ model ProductionBatch {
   createdById  String
   createdBy    User      @relation("BatchCreator", fields: [createdById], references: [id])
   createdAt    DateTime  @default(now())
+  /// Phase 8: the Warehouse Incharge closes the run once its Lots are packed. Closed frees its bins for a new run and
+  /// locks its Lots' records; only an Admin reopens it. Null = still running. Status is derived from this, never stored.
+  closedAt     DateTime?
+  closedById   String?
+  closedBy     User?     @relation("BatchCloser", fields: [closedById], references: [id])
 
-  bins        ProductionBatchBin[]
-  rcnReceipts RcnReceipt[]
+  bins         ProductionBatchBin[]
+  rcnReceipts  RcnReceipt[]
   sizingChecks SizingCheck[]
-  lots        FactoryLot[]
+  lots         FactoryLot[]
 
   @@unique([warehouse, name])
   @@index([warehouse])
@@ -2399,26 +2404,26 @@ model ProductionBatchBin {
 /// what keeps a load to the bins of its own batch. Moisture and weights come in later steps.
 model RcnReceipt {
   /// RR-<warehouse code>-<year of date>-NNNN (contract domain/ids.ts).
-  id          String             @id
-  batchCode   String
-  binCode     String
-  batchBin    ProductionBatchBin @relation(fields: [batchCode, binCode], references: [batchCode, binCode])
-  batch       ProductionBatch    @relation(fields: [batchCode], references: [code])
-  date        String
-  btmNo       String
-  createdById String
-  createdBy   User               @relation("RcnReceiptCreator", fields: [createdById], references: [id])
-  createdAt   DateTime           @default(now())
-  moistureChecks RcnMoistureCheck[]
-  pallets        RcnPallet[]
-  emptyPallets   RcnEmptyPalletStack[]
+  id              String                @id
+  batchCode       String
+  binCode         String
+  batchBin        ProductionBatchBin    @relation(fields: [batchCode, binCode], references: [batchCode, binCode])
+  batch           ProductionBatch       @relation(fields: [batchCode], references: [code])
+  date            String
+  btmNo           String
+  createdById     String
+  createdBy       User                  @relation("RcnReceiptCreator", fields: [createdById], references: [id])
+  createdAt       DateTime              @default(now())
+  moistureChecks  RcnMoistureCheck[]
+  pallets         RcnPallet[]
+  emptyPallets    RcnEmptyPalletStack[]
   /// Phase 1, step 4 (Final weight), from the tally sheet's Print form. Blank dust/voids = not recorded.
   /// The final weight is saved when finalisedAt is set; the totals are calculated (contract rcnWeighing.ts).
-  dustKg        String?
-  voidsKg       String?
-  finalisedById String?
-  finalisedBy   User?     @relation("RcnReceiptFinaliser", fields: [finalisedById], references: [id], onDelete: SetNull)
-  finalisedAt   DateTime?
+  dustKg          String?
+  voidsKg         String?
+  finalisedById   String?
+  finalisedBy     User?                 @relation("RcnReceiptFinaliser", fields: [finalisedById], references: [id], onDelete: SetNull)
+  finalisedAt     DateTime?
   calibrationRuns RcnCalibrationRun[]
 
   @@index([batchCode])
@@ -2488,7 +2493,6 @@ model RcnMoistureCheck {
 
   @@index([rcnReceiptId])
 }
-
 
 // ── Production Phase 2: Calibration ──────────────────────────────────────────────────────────────
 // From the client's "Production module" document (Oct 2026), Phase 2, and its workbooks 4. Calibration Process
@@ -2725,46 +2729,47 @@ model User {
   active       Boolean    @default(true)
   createdAt    DateTime   @default(now())
 
-  sessions            Session[]
-  approvedExceptions  Receipt[]               @relation("ExceptionApprover")
-  lockedReceipts      Receipt[]               @relation("ReceiptLocker")
-  activityEntries     WarehouseActivityLedgerEntry[] @relation("ActivityEntryAuthor")
-  juteVendorReceipts  JuteVendorReceipt[] @relation("JuteVendorReceiptAuthor")
-  juteEmptyBagReceipts JuteEmptyBagReceipt[] @relation("JuteEmptyBagReceiptAuthor")
-  juteOpeningsCreated JuteOpeningBalance[] @relation("JuteOpeningAuthor")
-  juteOpeningsEdited  JuteOpeningBalance[] @relation("JuteOpeningEditor")
-  createdSuppliers    Supplier[]              @relation("SupplierCreator")
-  updatedSuppliers    Supplier[]              @relation("SupplierUpdater")
-  uploadIssues        UploadIssue[]           @relation("UploadIssueUploader")
-  reviewedUploadIssues UploadIssue[]          @relation("UploadIssueReviewer")
-  dispatchedTransfers TransferRequest[]       @relation("TransferDispatcher")
-  receivedTransfers   TransferRequest[]       @relation("TransferReceiver")
-  cancelledPlans      DeliveryPlan[]          @relation("PlanCanceller")
-  suppliers           BranchManagerSupplier[] @relation("BmSuppliers")
-  assignedSuppliers   BranchManagerSupplier[] @relation("SupplierAssigner")
-  supplierRequests    SupplierRequest[]       @relation("SupplierRequester")
-  reviewedRequests    SupplierRequest[]       @relation("SupplierReviewer")
-  submissions         FormSubmission[]        @relation("SubmissionAuthor")
-  reviewedSubmissions FormSubmission[]        @relation("SubmissionReviewer")
-  fieldChanges        StageFieldChange[]
-  timeline            TimelineEntry[]
-  createdBatches      ProductionBatch[]       @relation("BatchCreator")
-  createdRcnReceipts  RcnReceipt[]            @relation("RcnReceiptCreator")
-  moistureChecks      RcnMoistureCheck[]      @relation("MoistureCheckAuthor")
-  reviewedMoisture    RcnMoistureCheck[]      @relation("MoistureCheckReviewer")
-  weighedPallets      RcnPallet[]             @relation("RcnPalletWeigher")
-  finalisedRcnReceipts RcnReceipt[]           @relation("RcnReceiptFinaliser")
-  calibrationRuns     RcnCalibrationRun[]     @relation("CalibrationRunAuthor")
-  sizingChecks        SizingCheck[]           @relation("SizingCheckAuthor")
-  reviewedSizingChecks SizingCheck[]          @relation("SizingCheckReviewer")
-  manualCalibrations  ManualCalibration[]     @relation("ManualCalibrationAuthor")
-  createdLots         FactoryLot[]            @relation("FactoryLotCreator")
-  lotCookRuns         LotCookRun[]            @relation("LotCookRunAuthor")
-  lotEntries          LotEntry[]              @relation("LotEntryAuthor")
-  reviewedLotEntries  LotEntry[]              @relation("LotEntryReviewer")
-  shellingDays        ShellingDay[]           @relation("ShellingDayAuthor")
-  truckMovements      TruckMovement[]         @relation("TruckMovementAuthor")
-  boilerReadings      BoilerReading[]         @relation("BoilerReadingAuthor")
+  sessions             Session[]
+  approvedExceptions   Receipt[]                      @relation("ExceptionApprover")
+  lockedReceipts       Receipt[]                      @relation("ReceiptLocker")
+  activityEntries      WarehouseActivityLedgerEntry[] @relation("ActivityEntryAuthor")
+  juteVendorReceipts   JuteVendorReceipt[]            @relation("JuteVendorReceiptAuthor")
+  juteEmptyBagReceipts JuteEmptyBagReceipt[]          @relation("JuteEmptyBagReceiptAuthor")
+  juteOpeningsCreated  JuteOpeningBalance[]           @relation("JuteOpeningAuthor")
+  juteOpeningsEdited   JuteOpeningBalance[]           @relation("JuteOpeningEditor")
+  createdSuppliers     Supplier[]                     @relation("SupplierCreator")
+  updatedSuppliers     Supplier[]                     @relation("SupplierUpdater")
+  uploadIssues         UploadIssue[]                  @relation("UploadIssueUploader")
+  reviewedUploadIssues UploadIssue[]                  @relation("UploadIssueReviewer")
+  dispatchedTransfers  TransferRequest[]              @relation("TransferDispatcher")
+  receivedTransfers    TransferRequest[]              @relation("TransferReceiver")
+  cancelledPlans       DeliveryPlan[]                 @relation("PlanCanceller")
+  suppliers            BranchManagerSupplier[]        @relation("BmSuppliers")
+  assignedSuppliers    BranchManagerSupplier[]        @relation("SupplierAssigner")
+  supplierRequests     SupplierRequest[]              @relation("SupplierRequester")
+  reviewedRequests     SupplierRequest[]              @relation("SupplierReviewer")
+  submissions          FormSubmission[]               @relation("SubmissionAuthor")
+  reviewedSubmissions  FormSubmission[]               @relation("SubmissionReviewer")
+  fieldChanges         StageFieldChange[]
+  timeline             TimelineEntry[]
+  createdBatches       ProductionBatch[]              @relation("BatchCreator")
+  closedBatches        ProductionBatch[]              @relation("BatchCloser")
+  createdRcnReceipts   RcnReceipt[]                   @relation("RcnReceiptCreator")
+  moistureChecks       RcnMoistureCheck[]             @relation("MoistureCheckAuthor")
+  reviewedMoisture     RcnMoistureCheck[]             @relation("MoistureCheckReviewer")
+  weighedPallets       RcnPallet[]                    @relation("RcnPalletWeigher")
+  finalisedRcnReceipts RcnReceipt[]                   @relation("RcnReceiptFinaliser")
+  calibrationRuns      RcnCalibrationRun[]            @relation("CalibrationRunAuthor")
+  sizingChecks         SizingCheck[]                  @relation("SizingCheckAuthor")
+  reviewedSizingChecks SizingCheck[]                  @relation("SizingCheckReviewer")
+  manualCalibrations   ManualCalibration[]            @relation("ManualCalibrationAuthor")
+  createdLots          FactoryLot[]                   @relation("FactoryLotCreator")
+  lotCookRuns          LotCookRun[]                   @relation("LotCookRunAuthor")
+  lotEntries           LotEntry[]                     @relation("LotEntryAuthor")
+  reviewedLotEntries   LotEntry[]                     @relation("LotEntryReviewer")
+  shellingDays         ShellingDay[]                  @relation("ShellingDayAuthor")
+  truckMovements       TruckMovement[]                @relation("TruckMovementAuthor")
+  boilerReadings       BoilerReading[]                @relation("BoilerReadingAuthor")
 
   @@index([role])
   @@index([warehouse])
@@ -2817,20 +2822,20 @@ model SupplierRequest {
 /// submitted ({stageId: {label: value}}); it is applied to the stage tables via setStageFields only
 /// on approval, so a pending submission never moves derived status. Rejection is terminal.
 model FormSubmission {
-  id            String    @id @default(cuid())
+  id            String             @id @default(cuid())
   receiptId     String
-  receipt       Receipt   @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  receipt       Receipt            @relation(fields: [receiptId], references: [id], onDelete: Cascade)
   formId        String
   values        Json
   submittedById String
-  submittedBy   User      @relation("SubmissionAuthor", fields: [submittedById], references: [id])
+  submittedBy   User               @relation("SubmissionAuthor", fields: [submittedById], references: [id])
   /// "submitted" | "approved" | "rejected"
-  status        String    @default("submitted")
+  status        String             @default("submitted")
   reviewedById  String?
-  reviewedBy    User?     @relation("SubmissionReviewer", fields: [reviewedById], references: [id])
+  reviewedBy    User?              @relation("SubmissionReviewer", fields: [reviewedById], references: [id])
   reviewedAt    DateTime?
   rejectReason  String?
-  createdAt     DateTime  @default(now())
+  createdAt     DateTime           @default(now())
   fieldChanges  StageFieldChange[]
 
   @@index([receiptId, formId])
@@ -2839,19 +2844,19 @@ model FormSubmission {
 
 /// Audit of every stage-field change made by a user: who, when, old -> new.
 model StageFieldChange {
-  id        Int      @id @default(autoincrement())
-  receiptId String
-  receipt   Receipt  @relation(fields: [receiptId], references: [id], onDelete: Cascade)
-  stageId   String
-  label     String
-  oldValue  String?
-  newValue  String?
+  id           Int             @id @default(autoincrement())
+  receiptId    String
+  receipt      Receipt         @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  stageId      String
+  label        String
+  oldValue     String?
+  newValue     String?
   /// Whoever's action wrote the row: the editor for "direct", the approver for "approval".
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  at        DateTime @default(now())
+  userId       String
+  user         User            @relation(fields: [userId], references: [id])
+  at           DateTime        @default(now())
   /// "direct" (Warehouse Incharge / admin edit) | "approval" (applied from a FormSubmission)
-  via       String
+  via          String
   /// The submission an "approval" row came from — who typed the values is its submittedBy, not `user` (the
   /// approver). Null for direct edits and uploads, and for approval rows written before this link existed.
   submissionId String?

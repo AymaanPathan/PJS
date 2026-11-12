@@ -9,7 +9,7 @@ import { Pill } from "../ui/Pill";
 import { api, ApiError } from "../../repository/api";
 import { SILO_SIZES, siloLabel, type SiloSize } from "@anagroci/contract/domain/calibration";
 import { formatDate, todayIso } from "@anagroci/contract/domain/dateFormat";
-import { ENTRY_DEFS, SHELLING_LINES, entryError, entryFieldText, entryFigures, entryNotes, type EntryField, type EntryKind } from "@anagroci/contract/domain/lotEntries";
+import { ENTRY_DEFS, SHELLING_LINES, entryError, entryFieldText, entryFigures, entryNotes, isEditableKind, type EntryField, type EntryKind } from "@anagroci/contract/domain/lotEntries";
 import type { LotEntryView, LotView } from "@anagroci/contract/types/lots";
 import { PRODUCTION_PAGE_SIZE, dateCol, statusCol } from "./columns";
 import { IconButton } from "../ui/IconButton";
@@ -28,6 +28,9 @@ export const decisionText = (kind: EntryKind, decision: string | null): string =
   return !d || !decision ? "-" : decision === "ok" ? d.ok : d.no;
 };
 
+/** "Quality after the Borma" → "quality after the Borma": only the first letter, so names keep their capitals. */
+const lowerFirst = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
+
 /** Up to this many waiting checks are shown one by one; a shift's machine samples can run to hundreds. */
 const WAITING_SHOWN = 5;
 
@@ -38,6 +41,7 @@ const WAITING_SHOWN = 5;
 export function EntryList({ kind, lot, can, startValues, onChanged }: { kind: EntryKind; lot: LotView; can: LotPermissions; startValues?: Record<string, string>; onChanged: () => void }) {
   const def = ENTRY_DEFS[kind];
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<LotEntryView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const entries = lot.entries.filter((e) => e.kind === kind);
   const waiting = entries.filter((e) => e.status === "submitted");
@@ -45,7 +49,7 @@ export function EntryList({ kind, lot, can, startValues, onChanged }: { kind: En
   const shownFields = def.fields.filter((f) => f.type !== "number" || f.required || !def.figures);
 
   async function removeEntry(e: LotEntryView) {
-    if (!window.confirm(`Remove this ${def.title.toLowerCase()} line?`)) return;
+    if (!window.confirm(`Remove this ${lowerFirst(def.title)} line?`)) return;
     setError(null);
     try {
       await api.deleteLotEntry(e.id);
@@ -85,7 +89,10 @@ export function EntryList({ kind, lot, can, startValues, onChanged }: { kind: En
     ...(def.who === "floor" && can.canFloor ? [{
       label: "", align: "right" as const, nowrap: true,
       render: (e: LotEntryView) => (
-        <IconButton icon="delete" label={`Remove the line of ${formatDate(e.date)}`} onClick={() => removeEntry(e)} />
+        <span className="inline-flex items-center gap-1">
+          {isEditableKind(kind) && <IconButton icon="edit" label={`Change the line of ${formatDate(e.date)}`} onClick={() => setEditing(e)} />}
+          <IconButton icon="delete" label={`Remove the line of ${formatDate(e.date)}`} onClick={() => removeEntry(e)} />
+        </span>
       ),
     }] : []),
   ];
@@ -93,7 +100,7 @@ export function EntryList({ kind, lot, can, startValues, onChanged }: { kind: En
   return (
     <div className="space-y-3">
       <p className="text-[13px] text-warmstone-800">{def.help}</p>
-      {mayAdd && <Button icon="add" onClick={() => setAdding(true)}>Add {def.title.toLowerCase()}</Button>}
+      {mayAdd && <Button icon="add" onClick={() => setAdding(true)}>Add {lowerFirst(def.title)}</Button>}
       {waiting.length > WAITING_SHOWN && can.canReview && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-ambernut-300 bg-ambernut-50 p-4">
           <p className="text-[13px] text-ambernut-900"><b>{waiting.length} waiting for your approval.</b> The first {WAITING_SHOWN} are below; all of them are in the list.</p>
@@ -127,6 +134,11 @@ export function EntryList({ kind, lot, can, startValues, onChanged }: { kind: En
       {adding && (
         <Modal wide title={`${def.check ? `${def.check} · ` : ""}${def.title}, Lot ${lot.code}`} onClose={() => setAdding(false)}>
           <EntryForm kind={kind} lot={lot} direct={can.canReview} startValues={startValues} onSaved={onChanged} onClose={() => setAdding(false)} />
+        </Modal>
+      )}
+      {editing && (
+        <Modal wide title={`Change ${lowerFirst(def.title)}, Lot ${lot.code}`} onClose={() => setEditing(null)}>
+          <EntryForm kind={kind} lot={lot} direct={can.canReview} entry={editing} onSaved={onChanged} onClose={() => setEditing(null)} />
         </Modal>
       )}
     </div>
@@ -172,10 +184,11 @@ function FieldControl({ field, sizes, value, onChange }: { field: EntryField; si
   return <Input numeric={field.type === "number"} value={value} onChange={change} />;
 }
 
-function EntryForm({ kind, lot, direct, startValues, onSaved, onClose }: { kind: EntryKind; lot: LotView; direct: boolean; startValues?: Record<string, string>; onSaved: () => void; onClose: () => void }) {
+/** Adds a record, or — given `entry` — changes a floor record already saved (a trolley's weight after the oven). */
+function EntryForm({ kind, lot, direct, startValues, entry, onSaved, onClose }: { kind: EntryKind; lot: LotView; direct: boolean; startValues?: Record<string, string>; entry?: LotEntryView; onSaved: () => void; onClose: () => void }) {
   const def = ENTRY_DEFS[kind];
-  const defaults = { ...(def.fields.some((f) => f.key === "sampleG") ? { sampleG: "1000" } : {}), ...startValues };
-  const [date, setDate] = useState(todayIso());
+  const defaults = entry ? entry.values : { ...(def.fields.some((f) => f.key === "sampleG") ? { sampleG: "1000" } : {}), ...startValues };
+  const [date, setDate] = useState(entry?.date ?? todayIso());
   const [values, setValues] = useState<Record<string, string>>(defaults);
   const [decision, setDecision] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
@@ -183,7 +196,7 @@ function EntryForm({ kind, lot, direct, startValues, onSaved, onClose }: { kind:
   const [saved, setSaved] = useState(0);
   // A cooker or a QC-3 is about what this Lot cooked; a line can run any of the sizes.
   const sizes = kind === "line_run" ? SILO_SIZES.map((s) => s.key) : lot.cookedSizes;
-  const canRepeat = def.fields.some((f) => f.keep);
+  const canRepeat = !entry && def.fields.some((f) => f.keep);
   const figures = entryFigures(kind, values);
   const notes = entryNotes(kind, values, { date, coolingAt: lot.coolingAt });
 
@@ -194,7 +207,8 @@ function EntryForm({ kind, lot, direct, startValues, onSaved, onClose }: { kind:
     setSaving(true);
     setError(null);
     try {
-      await api.addLotEntry(lot.code, { kind, ...input });
+      if (entry) await api.updateLotEntry(entry.id, { date, values });
+      else await api.addLotEntry(lot.code, { kind, ...input });
       onSaved();
       if (!again) return onClose();
       // The same line and shift, the next machine: only what stays the same from one sample to the next is kept.

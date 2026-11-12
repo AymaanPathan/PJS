@@ -19,7 +19,7 @@ import type { Prisma } from "@prisma/client";
 import type { WarehouseBinStock } from "@anagroci/contract/domain/productionBatch";
 import { streamFromWord } from "@anagroci/contract/domain/byProducts";
 import { SILO_SIZES, SIZING_GRADES, samplingPointFromWord, siloFromWord, siloLabel, type SizingGrams } from "@anagroci/contract/domain/calibration";
-import { ENTRY_DEFS, normalizeEntryValues, type EntryKind } from "@anagroci/contract/domain/lotEntries";
+import { ENTRY_DEFS, isEditableKind, normalizeEntryValues, type EntryKind } from "@anagroci/contract/domain/lotEntries";
 import { SHELLING_KG_FIELDS } from "@anagroci/contract/domain/shelling";
 import { CUT_TEST_GRAMS, sameBtmAndBin } from "@anagroci/contract/domain/rcnReceipt";
 import type { MoistureCheckInput } from "@anagroci/contract/types/rcnReceipt";
@@ -31,7 +31,7 @@ import { SAMPLE_LIMIT } from "../workbook/types.js";
 import { createBatchIn, runLabel, runWhere } from "../../services/production/batches.js";
 import { addBoilerReadingIn, addTruckIn, updateTruckIn } from "../../services/production/byProducts.js";
 import { addCalibrationRunIn, addManualCalibrationIn, submitSizingCheckIn } from "../../services/production/calibration.js";
-import { addLotEntryIn, addShellingDayIn, cookLotIn, moveToCoolingIn } from "../../services/production/factoryLots.js";
+import { addLotEntryIn, addShellingDayIn, cookLotIn, moveToCoolingIn, updateLotEntryIn } from "../../services/production/factoryLots.js";
 import { createRcnReceiptIn, runSizes, submitMoistureCheckIn, type Actor } from "../../services/production/rcnReceipts.js";
 import { addPalletIn, saveFinalWeightIn, updatePalletIn } from "../../services/production/rcnWeighing.js";
 import { gramKey, runKgKey, splitList, tabHeader, TABS, type Tab } from "./tabs.js";
@@ -380,8 +380,14 @@ async function entryRow(ctx: ProductionCtx, kind: EntryKind, cells: Cells): Prom
     const id = Number(raw);
     const saved = Number.isInteger(id) ? await ctx.tx.lotEntry.findFirst({ where: { id, kind, lot: { batch: { warehouse: ctx.site } } } }) : null;
     if (!saved) return refuse(`${def.title} ${raw} doesn't exist at ${ctx.site}. Leave the Entry ID blank to add a new one.`);
-    if (!sameEntry(saved)) refuse(`${def.title} ${raw} is already saved, and the file can't change it.`);
-    return "unchanged";
+    if (sameEntry(saved)) return "unchanged";
+    // The floor's own records are corrected from the file as on screen (a Borma tally sheet's after-oven weights,
+    // typed hours after its lines); a quality check stays as recorded.
+    if (!isEditableKind(kind)) refuse(`${def.title} ${raw} is already saved, and the file can't change it.`);
+    // A column the file doesn't have keeps its saved value; one it has (even blank) is what the file says.
+    const kept = Object.fromEntries(def.fields.filter((f) => !cells.has(`v_${f.key}`)).map((f) => [f.key, (saved.values as Record<string, string>)[f.key]]));
+    await updateLotEntryIn(ctx.tx, ctx.site, ctx.actor, id, { date: date || saved.date, values: { ...kept, ...values } });
+    return "changed";
   }
   const code = upper(cells.get("lotCode") ?? null);
   if (!code) return refuse("Give the Lot No.");

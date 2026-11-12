@@ -1,5 +1,5 @@
 /**
- * Production Phases 3–4: Lots, by-products and the boiler. Thin, like calibration.ts. Everything is Admin / Warehouse
+ * Production Phases 3–8: Lots, by-products and the boiler. Thin, like calibration.ts. Everything is Admin / Warehouse
  * Incharge except what auth/policy.ts opens to a QFS Officer: reading a batch's Lots and submitting their checks.
  */
 import type { FastifyInstance } from "fastify";
@@ -10,10 +10,12 @@ import {
   addBoilerReading, addTruck, deleteBoilerReading, deleteTruck, listBoilerReadings, listTrucks, storeBalances, updateTruck,
 } from "../services/production/byProducts.js";
 import {
-  addLotEntry, addShellingDay, approveAllOfKind, cookLot, deleteCookRun, deleteLotEntry, deleteShellingDay, listLots, moveToCooling, reviewLotEntry,
+  addLotEntry, addShellingDay, approveAllOfKind, cookLot, deleteCookRun, deleteLotEntry, deleteShellingDay, listLots, moveToCooling, reviewLotEntry, updateLotEntry,
 } from "../services/production/factoryLots.js";
 import { siteFor } from "./productionBatches.js";
 import { runWhere } from "../services/production/batches.js";
+import { listRcnReceipts } from "../services/production/rcnReceipts.js";
+import { runBalanceOf } from "../services/production/runBalance.js";
 
 export async function factoryLotRoutes(app: FastifyInstance) {
   const reviewers = { preHandler: requireRole("admin", "warehouse_incharge") };
@@ -26,11 +28,12 @@ export async function factoryLotRoutes(app: FastifyInstance) {
       reply.code(404).send({ error: `Production run ${code} not found` });
       return undefined;
     }
-    const [lots, stores, trucks, boiler, all] = await Promise.all([
+    const [lots, stores, trucks, boiler, all, loads] = await Promise.all([
       listLots(site, batch.code), storeBalances(prisma, site), listTrucks(site), listBoilerReadings(site),
       prisma.factoryLot.findMany({ where: { batch: { warehouse: site } }, select: { code: true } }),
+      listRcnReceipts(site, batch.code),
     ]);
-    return { lots, stores, trucks, boiler, allLotCodes: all.map((l) => l.code) };
+    return { lots, stores, trucks, boiler, allLotCodes: all.map((l) => l.code), balance: runBalanceOf(loads, lots) };
   });
 
   app.post("/api/production/factory-lots", reviewers, async (req, reply) => {
@@ -67,6 +70,11 @@ export async function factoryLotRoutes(app: FastifyInstance) {
   app.post("/api/production/lot-entries/:id/reject", reviewers, async (req) => {
     const { reason } = (req.body ?? {}) as { reason?: string };
     return reviewLotEntry(await siteFor(req), currentUser(req).id, Number((req.params as { id: string }).id), false, reason);
+  });
+
+  /** A floor record corrected or completed (a Borma trolley's weight after the oven). Checks are never edited. */
+  app.put("/api/production/lot-entries/:id", reviewers, async (req) => {
+    return updateLotEntry(await siteFor(req), currentUser(req), Number((req.params as { id: string }).id), (req.body ?? {}) as LotEntryInput);
   });
 
   app.delete("/api/production/lot-entries/:id", reviewers, async (req, reply) => {

@@ -1,7 +1,7 @@
 /**
  * The production workbook, end to end, the way a person uses it: download the sample, fill a row into every one of its
  * tabs, upload it (preview, then apply), and check that every phase came out right — Intake, Calibration, Cooking,
- * Shelling, Colour sorting, and the by-products. Then the round trips that protect real data: the same file uploaded
+ * Shelling, Colour sorting, Borma, Peeling & grading, Packing & dispatch, and the by-products — then close the run. Then the round trips that protect real data: the same file uploaded
  * twice creates nothing twice, and an export uploaded back unchanged changes nothing.
  *
  * Everything goes through HTTP, like the screen's Upload / Export dialog: the downloaded sample is the file that gets
@@ -112,6 +112,10 @@ const errorsOf = (p: Preview) => p.sheets.flatMap((s) => s.errors.map((e) => `${
 // 2.5 kg of dust = 4,538.9 kg to sort; sorted into silos A (3,000) and B (1,538.9); silo B fails its check and 100 kg
 // move to BC; 1,500 kg of A is cooked into Lot ANG26Z01, cooled, shelled into wholes and pieces, and both streams pass
 // the sorter. The shell it gives goes out on a truck and into the boiler.
+// Then Phases 6–8: a trolley of wholes (the Borma tally sheet's own first row: 222.5 kg empty, 567.9 gross before,
+// 546.5 after → 345.4 → 324 kg) goes to packing and a trolley of pieces to peeling; the pieces are humidified, peeled,
+// the husk winnowed and the kernels graded; 16 pouches of 20 kg are packed, checked, and 10 leave on a contract. The
+// husk winnowed to storage leaves on a truck too.
 type Row = Record<string, string | number>;
 const D = (day: number) => `2026-07-${String(day).padStart(2, "0")}`;
 
@@ -147,8 +151,31 @@ const DATA: Record<string, Row[]> = {
     { "Lot No": LOT, Date: D(25), Stream: "Wholes", "Size group": "A++ to B", Shift: "A", "Sample (g)": 1000, "Wholes (g)": 990, "Shell (g)": 10, Result: "OK" },
     { "Lot No": LOT, Date: D(25), Stream: "Pieces", "Size group": "A++ to B", Shift: "A", "Sample (g)": 1000, "Brokens (g)": 990, "Shell (g)": 10, Result: "OK" },
   ],
+  "Borma Trolleys": [
+    { "Lot No": LOT, Date: D(26), "Borma no": "1", Material: "Wholes", "Trolley no": "119", "Empty trolley before (kg)": 222.5, "Gross before (kg)": 567.9, "Gross after (kg)": 546.5, "Goes to": "Packing" },
+    { "Lot No": LOT, Date: D(26), "Borma no": "1", Material: "Pieces", "Trolley no": "7", "Empty trolley before (kg)": 200, "Gross before (kg)": 210, "Empty trolley after (kg)": 200, "Gross after (kg)": 209.4, "Goes to": "Peeling" },
+  ],
+  "Borma Ovens": [{ "Lot No": LOT, Date: D(26), "Borma no": "1", Start: "07:44", Stop: "16:44", "Set pressure (bar)": 2, "Cycle 1 temperature (°C)": 77, "Cycle 1 time (h)": 4 }],
+  "Borma Quality": [{
+    "Lot No": LOT, Date: D(27), "Sample (g)": 1000, "Nut count": 270, "Moisture (%)": 3.3, "Good kernels (g)": 680, "Pieces (g)": 11, "Scorched (g)": 9, "Spotted (g)": 76, "PUK3 (g)": 22,
+    "Shrivelled (g)": 53, "Dessert / NW (g)": 17, "Oil (g)": 11, "Dirty (g)": 9, "Rejection (g)": 9, "Husk (g)": 103, Result: "OK",
+  }],
+  Humidification: [{ "Lot No": LOT, Date: D(27), Chamber: "H1", "Trolley nos": "7", "Kg in": 9.4, "Kg out": 9.6 }],
+  "Humidity Checks": [{ "Lot No": LOT, Date: D(27), Chamber: "H1", "Moisture (%)": 5.2, Result: "OK" }],
+  Peeling: [{ "Lot No": LOT, Date: D(28), Machine: "P1", "Kg in": 9.6, "Wholes (kg)": 6, "Pieces (kg)": 2, "Husk (kg)": 1.2 }],
+  "Husk Winnowing": [{ "Lot No": LOT, Date: D(28), "Husk in (kg)": 1.2, "Pieces recovered (kg)": 0.3, "Husk to storage (kg)": 0.9 }],
+  Grading: [{ "Lot No": LOT, Date: D(28), Route: "Manual peeling", "Input material": "TW", WW: 4, SW: 2, SB: 1.5, Rejection: 0.4, "No of manpower": 1 }],
+  "Peeling Workers": [{ "Lot No": LOT, Date: D(28), "Employee no": "E-1", Name: "PAP WORKER", Gender: "FEMALE", "Kg peeled": 7.9 }],
+  "In-process Checks": [{ "Lot No": LOT, Date: D(28), Material: "Graded kernels", Grade: "WW", "Sample (g)": 1000, "Moisture (%)": 5, Result: "OK" }],
+  Packing: [{ "Lot No": LOT, Date: D(29), Lane: "8a · Borma wholes", Grade: "Borma CK # 20Kg Pouch", Bin: "ANA-03B", "Qty packed (packs)": 16 }],
+  "Pre-fill Checks": [{ "Lot No": LOT, Date: D(29), Lane: "8a · Borma wholes", Grade: "Borma CK # 20Kg Pouch", "Sample (g)": 1000, "Moisture (%)": 3, Result: "OK" }],
+  "Final Checks": [{ "Lot No": LOT, Date: D(29), Grade: "Borma CK # 20Kg Pouch", "Sample (g)": 1000, "Moisture (%)": 3, "Good kernels (g)": 1000, Result: "OK" }],
+  "FG Dispatch": [{ "Lot No": LOT, Date: D(30), Grade: "Borma CK # 20Kg Pouch", "Contract no": "PG/IVC/RC-KN/2026/004", "Qty dispatched (packs)": 10, "Truck no": "PAP-T2", "Gate pass / Sortie no": "GP-PAP-FG" }],
   Boiler: [{ DATE: D(25), "QTY Consumed (Kg's)": 10, "Running Hours": 8 }],
-  Trucks: [{ Stream: "Shell", DATE: D(25), "TRUCK NO": "PAP-T1", "Documents Checked": "Yes", "TARE WEIGHT": 1000, "GROSS WEIGHT": 1010, Vendor: "MTL", "Gate Pass No": "GP-PAP" }],
+  Trucks: [
+    { Stream: "Shell", DATE: D(25), "TRUCK NO": "PAP-T1", "Documents Checked": "Yes", "TARE WEIGHT": 1000, "GROSS WEIGHT": 1010, Vendor: "MTL", "Gate Pass No": "GP-PAP" },
+    { Stream: "Husk", DATE: D(30), "TRUCK NO": "PAP-T3", "Documents Checked": "Yes", "TARE WEIGHT": 1000, "GROSS WEIGHT": 1000.5, Vendor: "MTL", "Gate Pass No": "GP-PAP-H" },
+  ],
 };
 
 /** The downloaded sample with DATA typed into it, under the sample's own headers. */
@@ -244,18 +271,55 @@ describe("every phase came out as the rows say", () => {
   it("Cooking, Shelling and Colour sorting: the Lot went all the way, with every check on record", async () => {
     const data = await api(`/batches/${RUN}/lots`);
     const lot = data.lots.find((l: { code: string }) => l.code === LOT);
-    expect(lot).toMatchObject({ status: "colour_sorted", totalKg: 1500, coolingSilo: "CS-1", coolingCheck: "ok" });
+    expect(lot).toMatchObject({ earlyStatus: "colour_sorted", totalKg: 1500, coolingSilo: "CS-1", coolingCheck: "ok" });
     expect(lot.shellingDays).toHaveLength(1);
-    const kinds = lot.entries.map((e: { kind: string }) => e.kind).sort();
+    const early = ["cooker_log", "line_run", "qc3", "qc4", "qc5_capacity", "qc5_frequency", "qc6", "qc7_after", "qc7_before", "qty1", "waste_water"];
+    const kinds = lot.entries.map((e: { kind: string }) => e.kind).filter((k: string) => early.includes(k)).sort();
     expect(kinds).toEqual(["cooker_log", "line_run", "qc3", "qc4", "qc5_capacity", "qc5_frequency", "qc6", "qc7_after", "qc7_after", "qc7_before", "qty1", "waste_water"]);
     // The Incharge's own checks are approved as they are saved, from a file as on screen.
     expect(lot.entries.every((e: { status: string }) => e.status === "approved")).toBe(true);
   });
 
-  it("By-products: the shell truck and the boiler took their shell out of the store", async () => {
+  it("Borma: the trolleys' loss is worked out from their weights, and the Lot is past the oven", async () => {
+    const lot = (await api(`/batches/${RUN}/lots`)).lots.find((l: { code: string }) => l.code === LOT);
+    // 345.4 → 324 (the sheet's own row: 21.4 kg) and 10 → 9.4 (0.6 kg).
+    expect(lot.later.borma).toMatchObject({ trolleys: 2, weighedAfter: 2, beforeKg: 355.4, afterKg: 333.4, lossKg: 22, toPackingKg: 324, toPeelingKg: 9.4 });
+    expect(lot.later.checks.qc8).toBe("ok");
+  });
+
+  it("Peeling & grading: the gain, husk and rejection are worked out, and every check passed", async () => {
+    const lot = (await api(`/batches/${RUN}/lots`)).lots.find((l: { code: string }) => l.code === LOT);
+    expect(lot.later).toMatchObject({ humidGainKg: 0.2, huskKg: 0.9, gradedKg: 7.5, rejectKernelsKg: 0.4 });
+    expect(lot.later.checks).toMatchObject({ qc10: "ok", qc12: "ok" });
+  });
+
+  it("Packing & dispatch: 16 pouches × 20 kg packed, 10 dispatched, 6 left — and the Lot is Dispatched", async () => {
+    const lot = (await api(`/batches/${RUN}/lots`)).lots.find((l: { code: string }) => l.code === LOT);
+    expect(lot.status).toBe("dispatched");
+    expect(lot.later.fg).toEqual([expect.objectContaining({
+      grade: "Borma CK # 20Kg Pouch", code: "100000000150", sku: 20, packedQty: 16, packedKg: 320, dispatchedQty: 10, dispatchedKg: 200, closingQty: 6, closingKg: 120,
+    })]);
+    expect(lot.later.checks).toMatchObject({ qc9: "ok", qc11: "ok" });
+  });
+
+  it("By-products: the trucks and the boiler took their kg out of the stores, Phase 7's included", async () => {
     const data = await api(`/batches/${RUN}/lots`);
-    expect(data.trucks).toEqual([expect.objectContaining({ truckNo: "PAP-T1", netKg: 10 })]);
+    expect(data.trucks).toEqual([expect.objectContaining({ truckNo: "PAP-T3", netKg: 0.5 }), expect.objectContaining({ truckNo: "PAP-T1", netKg: 10 })]);
     expect(data.boiler).toHaveLength(1);
+    const store = (s: string) => data.stores.find((x: { stream: string }) => x.stream === s);
+    expect(store("husk")).toMatchObject({ producedKg: 0.9, dispatchedKg: 0.5, stockKg: 0.4 });
+    expect(store("reject_kernels")).toMatchObject({ producedKg: 0.4, stockKg: 0.4 });
+  });
+
+  it("the run's balance lists every stream that left the line, against the kg packed", async () => {
+    const { balance } = await api(`/batches/${RUN}/lots`);
+    const line = (label: string) => balance.lines.find((l: { label: string }) => l.label === label)?.kg;
+    expect(line("RCN received (net)")).toBe(4_541.4);
+    expect(line("Dust")).toBe(2.5);
+    expect(line("Borma moisture loss")).toBe(22);
+    expect(line("Husk")).toBe(0.9);
+    expect(balance.packedKg).toBe(320);
+    expect(balance.unaccountedKg).toBe(Math.round((balance.expectedKg - 320) * 100) / 100);
   });
 });
 
@@ -308,5 +372,69 @@ describe("uploading again never duplicates or changes anything", () => {
     expect(errorsOf(p).join("\n")).toBe("");
     expect(p.totalCreated + p.totalChanged).toBe(0);
     for (const tab of TABS) expect(p.sheets.find((s) => s.name === tab.title)?.unchanged, tab.title).toBeGreaterThan(0);
+  });
+});
+
+describe("a floor record is completed from the file, a check never is", () => {
+  const borma = TABS.find((t) => t.title === "Borma Trolleys")!;
+  const one = async (title: string, rows: Row[]) => {
+    const tab = TABS.find((t) => t.title === title)!;
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet(title);
+    // Only the columns the rows fill in: a column in the file, even blank, is what the file says.
+    const labels = tab.fields.filter((f) => !f.derived && (f.key === tab.key || rows.some((r) => f.label in r))).map((f) => f.label);
+    ws.addRow(labels);
+    for (const row of rows) ws.addRow(labels.map((l) => row[l] ?? null));
+    return upload(Buffer.from((await wb.xlsx.writeBuffer()) as ArrayBuffer));
+  };
+
+  it("a trolley typed before the oven gets its weight after the oven by its Entry ID", async () => {
+    const add = await one("Borma Trolleys", [{ "Lot No": LOT, Date: D(31), "Borma no": "2", Material: "Wholes", "Trolley no": "200", "Empty trolley before (kg)": 200, "Gross before (kg)": 421.4 }]);
+    expect(errorsOf(add).join("\n")).toBe("");
+    await commit(add.token);
+    const saved = await prisma.lotEntry.findFirst({ where: { lotCode: LOT, kind: "borma_trolley", date: D(31) } });
+    const lotNow = async () => (await (await get(`/api/production/batches/${RUN}/lots`)).json()).lots.find((l: { code: string }) => l.code === LOT);
+    expect((await lotNow()).later.borma).toMatchObject({ trolleys: 3, weighedAfter: 2 });
+
+    // The doc's trolley 200: 221.4 → 205.2 kg net. Only the column the file has changes; the rest stays as saved.
+    const fill = await one("Borma Trolleys", [{ "Entry ID": saved!.id, "Lot No": LOT, Date: D(31), "Gross after (kg)": 405.2 }]);
+    expect(errorsOf(fill).join("\n")).toBe("");
+    expect(fill.sheets[0]).toMatchObject({ changed: 1, created: 0 });
+    await commit(fill.token);
+    const after = await prisma.lotEntry.findUnique({ where: { id: saved!.id } });
+    expect(after!.values).toMatchObject({ trolleyNo: "200", grossBeforeKg: "421.4", grossAfterKg: "405.2" });
+    expect((await lotNow()).later.borma).toMatchObject({ trolleys: 3, weighedAfter: 3 });
+    expect(borma.fields.some((f) => f.derived && f.label === "Loss %")).toBe(true);
+  });
+
+  it("refuses to change a saved quality check", async () => {
+    const qc = await prisma.lotEntry.findFirst({ where: { lotCode: LOT, kind: "qc10" } });
+    const p = await one("Humidity Checks", [{ "Entry ID": qc!.id, "Lot No": LOT, Date: D(27), Chamber: "H1", "Moisture (%)": 9, Result: "OK" }]);
+    expect(errorsOf(p).join("\n")).toMatch(/already saved, and the file can't change it/);
+  });
+
+  it("won't let more packs leave than were packed", async () => {
+    const p = await one("FG Dispatch", [{ "Lot No": LOT, Date: D(31), Grade: "Borma CK # 20Kg Pouch", "Contract no": "PG/X", "Qty dispatched (packs)": 7 }]);
+    expect(errorsOf(p).join("\n")).toMatch(/has 6 pack\(s\) of Borma CK # 20Kg Pouch left; 7 can't be dispatched/);
+  });
+});
+
+describe("closing the run (Phase 8)", () => {
+  const post = (url: string) => app.inject({ method: "POST", url: `/api/production${url}`, headers: { cookie } });
+
+  it("the Warehouse Incharge closes it: its Lots are locked and its bins are free for a new run", async () => {
+    const res = await post(`/batches/${RUN}/close`);
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json()).toMatchObject({ status: "closed", closedBy: "wi" });
+    const add = await app.inject({ method: "POST", url: `/api/production/factory-lots/${LOT}/entries`, headers: { cookie }, payload: { kind: "borma_oven", date: D(31), values: { bormaNo: "3", start: "07:00", stop: "15:00", pressureBar: "2" } } });
+    expect(add.statusCode).toBe(422);
+    expect(add.json().error).toMatch(/is closed/);
+    const bins = (await get("/api/production/batch-bins")).json() as { binCode: string; inBatch: string | null }[];
+    expect(bins.find((b) => b.binCode === "PAP-03B")?.inBatch).toBeNull();
+    expect((await post(`/batches/${RUN}/close`)).statusCode).toBe(422);
+  });
+
+  it("only an Admin reopens it", async () => {
+    expect((await post(`/batches/${RUN}/reopen`)).statusCode).toBe(403);
   });
 });

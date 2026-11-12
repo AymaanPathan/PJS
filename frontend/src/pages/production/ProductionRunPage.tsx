@@ -5,12 +5,16 @@ import { PRODUCTION_PAGE_SIZE, dateCol, kgCol, numCol, textCol } from "../../com
 import { Pill } from "../../components/ui/Pill";
 import { Card, CardTitle } from "../../components/ui/Card";
 import { StepNav, type StepItem, type StepState } from "../../components/ui/StepNav";
-import { PRODUCTION_STAGES, BatchStatusPill, formatTonnes, useSiteHrefs, type ProductionStageId } from "../../components/production/batchUi";
+import { PRODUCTION_STAGES, BatchStatusPill, formatKg, formatTonnes, useSiteHrefs, type ProductionStageId } from "../../components/production/batchUi";
+import { ENTRY_PHASE } from "@anagroci/contract/domain/lotEntries";
 import { IntakeStage } from "../../components/production/IntakeStage";
 import { CalibrationSection } from "../../components/production/CalibrationSection";
 import { CookingSection } from "../../components/production/CookingSection";
 import { ShellingSection } from "../../components/production/ShellingSection";
 import { ColourSortSection } from "../../components/production/ColourSortSection";
+import { BormaSection } from "../../components/production/BormaSection";
+import { PeelingSection } from "../../components/production/PeelingSection";
+import { PackingSection } from "../../components/production/PackingSection";
 import { useBatch, useBatchCalibration, useBatchLots } from "../../state/productionBatches";
 import { useRcnReceipts } from "../../state/rcnReceipts";
 import { useCanEditDirectly, useHasRole } from "../../state/AuthContext";
@@ -57,6 +61,7 @@ export function ProductionRunPage() {
   const lots = useBatchLots(code);
   const canEdit = useCanEditDirectly();
   const isQfs = useHasRole("qfs_officer");
+  const isAdmin = useHasRole("admin");
   const [params, setParams] = useSearchParams();
 
   if (loading) return <div className="p-10 text-warmstone-400 text-[13px]">Loading…</div>;
@@ -70,8 +75,10 @@ export function ProductionRunPage() {
   const entriesWaiting = lotList.flatMap((l) => l.entries).filter((e) => e.status === "submitted").length;
 
   // Stages overlap (loads keep arriving while earlier ones are cooked), so the run is "at" the furthest one reached.
-  const reached = lotList.some((l) => l.status === "colour_sorted" || l.entries.some((e) => e.kind === "qc7_before" || e.kind === "qc7_after")) ? 5
-    : lotList.some((l) => l.status === "ready" || l.status === "shelled") ? 4 : lotList.length > 0 ? 3 : loads.some((r) => isIntakeDone(r.status)) ? 2 : 1;
+  const hasPhase = (n: number) => lotList.some((l) => l.entries.some((e) => e.status !== "rejected" && ENTRY_PHASE[e.kind] === n));
+  const reached = hasPhase(8) ? 8 : hasPhase(7) ? 7 : hasPhase(6) ? 6
+    : lotList.some((l) => l.earlyStatus === "colour_sorted" || l.entries.some((e) => e.kind === "qc7_before" || e.kind === "qc7_after")) ? 5
+    : lotList.some((l) => l.earlyStatus === "ready" || l.earlyStatus === "shelled") ? 4 : lotList.length > 0 ? 3 : loads.some((r) => isIntakeDone(r.status)) ? 2 : 1;
   const stateOf = (n: number, built: boolean): StepState => (!built ? "later" : n < reached ? "done" : n === reached ? "current" : "todo");
 
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -81,11 +88,11 @@ export function ProductionRunPage() {
     intake: loads.length === 0 ? "No load yet" : `${plural(loads.length, "load")}${inIntake ? ` · ${inIntake} in progress` : ""}`,
     calibration: toSort ? `${plural(toSort, "load")} to sort` : checksWaiting ? `${plural(checksWaiting, "check")} to approve` : "Silos and their checks",
     cooking: lotList.length ? `${plural(lotList.length, "Lot")} cooked` : "No Lot yet",
-    shelling: `${lotList.filter((l) => l.status === "shelled" || l.status === "colour_sorted").length} of ${plural(lotList.length, "Lot")} shelled`,
-    colour_sort: `${lotList.filter((l) => l.status === "colour_sorted").length} sorted`,
-    borma: "Not built yet",
-    peeling: "Not built yet",
-    packing: "Not built yet",
+    shelling: `${lotList.filter((l) => l.earlyStatus === "shelled" || l.earlyStatus === "colour_sorted").length} of ${plural(lotList.length, "Lot")} shelled`,
+    colour_sort: `${lotList.filter((l) => l.earlyStatus === "colour_sorted").length} sorted`,
+    borma: `${formatKg(lotList.reduce((n, l) => n + l.later.borma.afterKg, 0))} dried`,
+    peeling: `${formatKg(lotList.reduce((n, l) => n + l.later.gradedKg, 0))} graded`,
+    packing: run.status === "closed" ? "Run closed" : `${formatKg(lotList.reduce((n, l) => n + l.later.fg.reduce((m, g) => m + g.packedKg, 0), 0))} packed`,
   };
   const steps: StepItem<ProductionStageId>[] = PRODUCTION_STAGES.map((s, i) => ({ id: s.id, label: s.label, state: stateOf(i + 1, s.built), sub: SUB[s.id] }));
 
@@ -95,7 +102,9 @@ export function ProductionRunPage() {
   const stage = PRODUCTION_STAGES.find((s) => s.id === view);
 
   const waiting = WAITING_ORDER.map((st) => [st, loads.filter((r) => r.status === st).length] as const).filter(([, n]) => n > 0);
-  const can = { canFloor: canEdit, canCheck: canEdit || isQfs, canReview: canEdit };
+  // A closed run's records are locked (the backend refuses them too): nothing to add until an Admin reopens it.
+  const closed = run.status === "closed";
+  const can = { canFloor: canEdit && !closed, canCheck: (canEdit || isQfs) && !closed, canReview: canEdit && !closed };
   const loadingText = (e: string | null | undefined) => <p className="text-[13px] text-warmstone-500">{e ?? "Loading…"}</p>;
 
   return (
@@ -121,7 +130,11 @@ export function ProductionRunPage() {
           </div>
           <div className="bg-warmstone-50 border border-warmstone-200 rounded-xl p-4 w-full lg:w-96">
             <p className="text-[11px] font-bold uppercase tracking-wider text-warmstone-500">Waiting now</p>
-            {waiting.length === 0 && checksWaiting + entriesWaiting === 0 ? (
+            {closed ? (
+              <p className="mt-1.5 text-[13px] font-semibold text-warmstone-900">
+                Closed{run.closedAt ? ` ${formatDateTime(run.closedAt)}` : ""}{run.closedBy ? ` by ${run.closedBy}` : ""}. Its records are locked.
+              </p>
+            ) : waiting.length === 0 && checksWaiting + entriesWaiting === 0 ? (
               <p className="mt-1.5 text-[13px] font-semibold text-warmstone-900">{loads.length === 0 ? "Record the first load in Intake." : "Nothing is waiting."}</p>
             ) : (
               <ul className="mt-1.5 space-y-1">
@@ -187,6 +200,11 @@ export function ProductionRunPage() {
             : loadingText(lots.error ?? calibration.error))}
           {view === "shelling" && (lots.data ? <ShellingSection data={lots.data} can={can} onChanged={onChanged} /> : loadingText(lots.error))}
           {view === "colour_sort" && (lots.data ? <ColourSortSection data={lots.data} can={can} onChanged={onChanged} /> : loadingText(lots.error))}
+          {view === "borma" && (lots.data ? <BormaSection data={lots.data} can={can} onChanged={onChanged} /> : loadingText(lots.error))}
+          {view === "peeling" && (lots.data ? <PeelingSection data={lots.data} can={can} onChanged={onChanged} /> : loadingText(lots.error))}
+          {view === "packing" && (lots.data
+            ? <PackingSection run={run} data={lots.data} can={can} canReopen={isAdmin && closed} onChanged={onChanged} />
+            : loadingText(lots.error))}
           {stage && !stage.built && (
             <p className="rounded-2xl border border-dashed border-warmstone-300 bg-warmstone-50/60 px-5 py-4 text-[13px] text-warmstone-500">This stage is not built in the app yet.</p>
           )}

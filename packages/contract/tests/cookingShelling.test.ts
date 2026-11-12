@@ -207,7 +207,8 @@ describe("the checks on the line", () => {
 
   it("every kind names its workbook sheet, and only a check with a decision asks for one", () => {
     expect(new Set(ENTRY_KINDS.map((k) => ENTRY_DEFS[k].sheet)).size).toBe(ENTRY_KINDS.length);
-    expect(ENTRY_KINDS.filter((k) => ENTRY_DEFS[k].decision)).toEqual(["qc3", "qc4", "qc7_after"]);
+    // QC-5, QC-6, QTY-1 and QC-7 before the sorter only raise alerts; every check of Phases 6–8 sends material back on No.
+    expect(ENTRY_KINDS.filter((k) => ENTRY_DEFS[k].decision)).toEqual(["qc3", "qc4", "qc7_after", "qc8", "qc10", "qc12", "qc9", "qc11"]);
   });
 });
 

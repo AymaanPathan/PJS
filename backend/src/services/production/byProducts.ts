@@ -17,18 +17,21 @@ const name = { select: { displayName: true } };
 export async function storeBalances(tx: Tx | typeof prisma, site: string): Promise<StoreBalance[]> {
   const [loads, entries, days, trucks, boiler] = await Promise.all([
     tx.rcnReceipt.findMany({ where: { batch: { warehouse: site }, finalisedAt: { not: null } }, select: { dustKg: true, voidsKg: true } }),
-    tx.lotEntry.findMany({ where: { kind: "waste_water", lot: { batch: { warehouse: site } } }, select: { values: true } }),
+    tx.lotEntry.findMany({ where: { kind: { in: ["waste_water", "winnowing", "grading"] }, status: { not: "rejected" }, lot: { batch: { warehouse: site } } }, select: { kind: true, values: true } }),
     tx.shellingDay.findMany({ where: { lot: { batch: { warehouse: site } } }, select: { inputKg: true, wholesKg: true, piecesKg: true, rejectionKg: true, oilKg: true, blackRejectionKg: true } }),
     tx.truckMovement.findMany({ where: { warehouse: site, gatePassNo: { not: null } }, select: { stream: true, tareKg: true, grossKg: true } }),
     tx.boilerReading.findMany({ where: { warehouse: site }, select: { shellKg: true } }),
   ]);
+  const entryKg = (kind: string, key: string) => entries.filter((e) => e.kind === kind).reduce((n, e) => n + (Number((e.values as Record<string, string>)[key]) || 0), 0);
   const figures = days.map((d) => shellingFigures({ inputKg: d.inputKg, wholesKg: d.wholesKg ?? "", piecesKg: d.piecesKg ?? "", rejectionKg: d.rejectionKg ?? "", oilKg: d.oilKg ?? "", blackRejectionKg: d.blackRejectionKg ?? "" }));
   const produced: Record<Stream, number> = {
     dust_voids: loads.reduce((n, l) => n + (Number(l.dustKg) || 0) + (Number(l.voidsKg) || 0), 0),
-    waste_water: entries.reduce((n, e) => n + (Number((e.values as { kg?: string }).kg) || 0), 0),
+    waste_water: entryKg("waste_water", "kg"),
     shell: figures.reduce((n, f) => n + f.shellKg, 0),
     shell_dust: figures.reduce((n, f) => n + f.shellDustKg, 0),
     black_rejection: days.reduce((n, d) => n + (Number(d.blackRejectionKg) || 0), 0),
+    husk: entryKg("winnowing", "huskToStorageKg"),
+    reject_kernels: entryKg("grading", "rejectionKg"),
   };
   const dispatched = (s: Stream) => trucks.filter((t) => t.stream === s).reduce((n, t) => n + (truckNetKg(t) ?? 0), 0);
   const burned = boiler.reduce((n, b) => n + (Number(b.shellKg) || 0), 0);

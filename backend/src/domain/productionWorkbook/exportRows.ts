@@ -5,7 +5,7 @@
  */
 import { SILO_SIZES, SIZING_GRADES, type SiloSize } from "@anagroci/contract/domain/calibration";
 import { TRUCK_STATUS_LABELS, streamLabel } from "@anagroci/contract/domain/byProducts";
-import { ENTRY_DEFS, ENTRY_KINDS, sizeWord } from "@anagroci/contract/domain/lotEntries";
+import { ENTRY_DEFS, ENTRY_KINDS, entryFigures, sizeWord } from "@anagroci/contract/domain/lotEntries";
 import { BATCH_STATUS_LABELS } from "@anagroci/contract/domain/productionBatch";
 import { RCN_RECEIPT_STATUS_LABELS } from "@anagroci/contract/domain/rcnReceipt";
 import { weighingTotals } from "@anagroci/contract/domain/rcnWeighing";
@@ -14,7 +14,7 @@ import { listBoilerReadings, listTrucks } from "../../services/production/byProd
 import { listSizingChecks } from "../../services/production/calibration.js";
 import { listLots } from "../../services/production/factoryLots.js";
 import { listRcnReceipts } from "../../services/production/rcnReceipts.js";
-import { gramKey, joinList, runKgKey, type Tab } from "./tabs.js";
+import { figureKey, gramKey, joinList, runKgKey, type Tab } from "./tabs.js";
 
 export type TabRow = Record<string, unknown>;
 
@@ -83,6 +83,7 @@ export async function exportRows(site: string): Promise<Record<Tab["id"], TabRow
       id: e.id, lotCode: l.code, date: e.date, status: CHECK_STATUS[e.status],
       decision: e.decision === null ? null : e.decision === "ok" ? "OK" : e.decision === "wait" ? "Wait" : "No",
       ...Object.fromEntries(ENTRY_DEFS[kind].fields.map((f) => [`v_${f.key}`, f.type === "size" ? sizeWord(e.values[f.key]) : e.values[f.key]])),
+      ...Object.fromEntries(entryFigures(kind, e.values).map((fig, i) => [figureKey(i), fig.value])),
     })))])) as unknown as Record<`entry:${(typeof ENTRY_KINDS)[number]}`, TabRow[]>),
   };
 }

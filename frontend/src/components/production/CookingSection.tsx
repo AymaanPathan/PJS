@@ -19,12 +19,15 @@ import type { BatchCalibration } from "@anagroci/contract/types/calibration";
 import type { BatchLots, LotView } from "@anagroci/contract/types/lots";
 import { PRODUCTION_PAGE_SIZE, dateCol, kgCol, numCol, statusCol, textCol } from "./columns";
 
-const STATUS_TONE: Record<LotStatus, string> = { cooking: "decision", cooling: "decision", ready: "entry", shelled: "term", colour_sorted: "term" };
+const STATUS_TONE: Record<LotStatus, string> = {
+  cooking: "decision", cooling: "decision", ready: "entry", shelled: "term", colour_sorted: "term",
+  in_borma: "term", humidified: "term", peeled: "term", graded: "term", packed: "term", qc11_passed: "entry", dispatched: "entry",
+};
 const CHECK_TONE: Record<CookCheckState, string> = { not_checked: "system", waiting: "decision", ok: "entry", recook: "gap" };
 export const LotStatusPill = ({ status }: { status: LotStatus }) => <Pill tone={STATUS_TONE[status]} label={LOT_STATUS_LABELS[status]} />;
 
 /** The Lot this person should be looking at: the oldest with something left to do in this phase, or else the newest. */
-const firstOpen = (lots: LotView[]) => lots.find((l) => l.status === "cooking" || l.status === "cooling") ?? lots.at(-1) ?? null;
+const firstOpen = (lots: LotView[]) => lots.find((l) => l.earlyStatus === "cooking" || l.earlyStatus === "cooling") ?? lots.at(-1) ?? null;
 
 const stepOf = (lot: LotView, can: LotPermissions) => nextCookingStep({
   ...can, sizes: lot.cookedSizes, checks: lot.cookChecks, toRecook: sizesToRecook(lot.cookedSizes, lot.entries), inCooling: lot.coolingAt !== null, cooling: lot.coolingCheck,
@@ -48,7 +51,7 @@ export function CookingSection({ batchCode, data, calibration, can, onChanged, o
   const lot = data.lots.find((l) => l.code === pickedCode) ?? firstOpen(data.lots);
   const step = lot ? stepOf(lot, can) : "none";
   const inSilosKg = calibration.silos.reduce((n, s) => n + s.stockKg, 0);
-  const ready = lot !== null && (lot.status === "ready" || lot.status === "shelled");
+  const ready = lot !== null && (lot.earlyStatus === "ready" || lot.earlyStatus === "shelled");
   const held = lot ? sizesToRecook(lot.cookedSizes, lot.entries) : [];
 
   const nextText =

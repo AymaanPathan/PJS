@@ -61,12 +61,11 @@ export async function procurementBinStock(site: string): Promise<Map<string, War
 }
 
 /**
- * Which batch each bin is already in. Every batch counts as running until closing exists (Phase 8);
- * when it does, closed batches drop out here and their bins become selectable again.
+ * Which running batch each bin is in. A closed batch (Phase 8) drops out here, so its bins become selectable again.
  */
 async function runningBatchOfBins(binCodes?: string[]): Promise<Map<string, string>> {
   const rows = await prisma.productionBatchBin.findMany({
-    where: binCodes ? { binCode: { in: binCodes } } : {},
+    where: { ...(binCodes ? { binCode: { in: binCodes } } : {}), batch: { closedAt: null } },
     select: { binCode: true, batchCode: true },
   });
   return new Map(rows.map((r) => [r.binCode, r.batchCode]));
@@ -76,7 +75,7 @@ async function runningBatchOfBins(binCodes?: string[]): Promise<Map<string, stri
 export async function listAvailableBins(site: string): Promise<AvailableBin[]> {
   const stock = await procurementBinStock(site);
   const kept = keptLotsByBin(await listReceipts(await resolveSite(site)));
-  const batchBins = await prisma.productionBatchBin.findMany({ where: { batch: { warehouse: site } }, select: { binCode: true, batchCode: true } });
+  const batchBins = await prisma.productionBatchBin.findMany({ where: { batch: { warehouse: site, closedAt: null } }, select: { binCode: true, batchCode: true } });
   const codes = [...new Set([...stock.keys(), ...batchBins.map((b) => b.binCode)])];
   const [master, inBatch] = await Promise.all([
     prisma.bin.findMany({ where: { code: { in: codes } }, select: { code: true, warehouseName: true } }),
@@ -141,7 +140,7 @@ export async function createBatchIn(tx: Prisma.TransactionClient, site: string, 
     const empty = binCodes.filter((c) => !stock.get(c)?.lots.length);
     if (empty.length) throw new ValidationError(`No procurement stock in ${empty.join(", ")} at ${site}.`);
 
-    const taken = await tx.productionBatchBin.findMany({ where: { binCode: { in: binCodes } }, select: { binCode: true, batchCode: true, batch: { select: { name: true } } } });
+    const taken = await tx.productionBatchBin.findMany({ where: { binCode: { in: binCodes }, batch: { closedAt: null } }, select: { binCode: true, batchCode: true, batch: { select: { name: true } } } });
     if (taken.length) throw new ValidationError(taken.map((t) => `${t.binCode} is already in production run ${runLabel(t.batchCode, t.batch.name)}`).join("; ") + ".");
 
     if (name && (await tx.productionBatch.findFirst({ where: { warehouse: site, name }, select: { code: true } }))) throw new ValidationError(`A production run named ${name} already exists.`);
@@ -165,6 +164,7 @@ export async function createBatchIn(tx: Prisma.TransactionClient, site: string, 
 const BATCH_INCLUDE = {
   bins: true,
   createdBy: { select: { displayName: true } },
+  closedBy: { select: { displayName: true } },
   rcnReceipts: {
     select: {
       btmNo: true, binCode: true, createdAt: true, createdBy: { select: { displayName: true } },
@@ -220,11 +220,13 @@ function toSummary(b: BatchRow): BatchSummary {
     proposedBy: b.proposedBy,
     createdBy: b.createdBy.displayName,
     createdAt: b.createdAt.toISOString(),
-    status: batchStatus(b.rcnReceipts.length),
+    status: batchStatus(b.rcnReceipts.length, b.closedAt !== null),
     plannedKg: plan.plannedKg,
     days: plan.days,
     endDate: plan.endDate ?? null,
     binCodes: b.bins.map((x) => x.binCode).sort(),
+    closedAt: b.closedAt?.toISOString() ?? null,
+    closedBy: b.closedBy?.displayName ?? null,
   };
 }
 
@@ -278,14 +280,15 @@ export async function getBatch(site: string, code: string): Promise<BatchDetail 
       })),
     ]),
     ...row.lots.flatMap(lotHistory),
+    ...(summary.closedAt ? [{ at: summary.closedAt, text: "Production run closed", actor: summary.closedBy }] : []),
   ].sort((a, b) => b.at.localeCompare(a.at));
 
   return { ...summary, bins, history };
 }
 
-/** For the procurement Bin page: the batch a bin has been put in, if any. */
+/** For the procurement Bin page: the batch a bin has been put in, if any — the running one, else the latest. */
 export async function batchOfBin(binCode: string): Promise<{ batchCode: string; plannedKg: number } | null> {
-  const row = await prisma.productionBatchBin.findFirst({ where: { binCode }, select: { batchCode: true, plannedKg: true } });
+  const row = await prisma.productionBatchBin.findFirst({ where: { binCode }, select: { batchCode: true, plannedKg: true }, orderBy: [{ batch: { closedAt: { sort: "desc", nulls: "first" } } }, { batch: { createdAt: "desc" } }] });
   return row ? { batchCode: row.batchCode, plannedKg: Number(row.plannedKg) } : null;
 }
 
@@ -350,4 +353,33 @@ function reviewedHistory(what: string, name: string, c: ReviewedForHistory): Bat
     });
   }
   return entries;
+}
+
+// ── Phase 8 · Closing the run ───────────────────────────────────────────────────────────────────
+
+/**
+ * "The Warehouse Incharge closes the batch when all its Lots are packed. The app shows every stream that left the line,
+ * so the balance can be checked before locking." The balance is shown on screen, never a condition: closing is the
+ * Incharge's call. Closing locks the run's Lot records and frees its bins for a new run.
+ */
+export async function closeBatch(site: string, actorId: string, code: string): Promise<BatchDetail> {
+  const run = await prisma.productionBatch.findFirst({ where: runWhere(site, code), select: { code: true, closedAt: true } });
+  if (!run) throw new ValidationError(`Production run ${code} doesn't exist at ${site}.`);
+  if (run.closedAt) throw new ValidationError(`Production run ${run.code} is already closed.`);
+  await prisma.productionBatch.update({ where: { code: run.code }, data: { closedAt: new Date(), closedById: actorId } });
+  return (await getBatch(site, run.code))!;
+}
+
+/** "Unlocks locked records": Admin only (routes). Refused if one of its bins has since gone into another running run. */
+export async function reopenBatch(site: string, code: string): Promise<BatchDetail> {
+  const run = await prisma.productionBatch.findFirst({ where: runWhere(site, code), select: { code: true, closedAt: true, bins: { select: { binCode: true } } } });
+  if (!run) throw new ValidationError(`Production run ${code} doesn't exist at ${site}.`);
+  if (!run.closedAt) throw new ValidationError(`Production run ${run.code} is not closed.`);
+  const taken = await prisma.productionBatchBin.findMany({
+    where: { binCode: { in: run.bins.map((b) => b.binCode) }, batch: { closedAt: null, code: { not: run.code } } },
+    select: { binCode: true, batchCode: true },
+  });
+  if (taken.length) throw new ValidationError(taken.map((t) => `${t.binCode} is now in production run ${t.batchCode}`).join("; ") + ". The run can't be reopened.");
+  await prisma.productionBatch.update({ where: { code: run.code }, data: { closedAt: null, closedById: null } });
+  return (await getBatch(site, run.code))!;
 }

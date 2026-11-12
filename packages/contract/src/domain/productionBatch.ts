@@ -264,13 +264,14 @@ export const BATCH_CODE_PATTERN = /^[A-Z0-9][A-Z0-9._-]*$/;
 // ── Status ──────────────────────────────────────────────────────────────────────────────────
 
 /**
- * Open → In process (first load received) → Closed. Derived from the batch's RCN Receipts, never
- * typed. Closed doesn't exist until closing is built.
+ * Open → In process (first load received) → Closed (by the Warehouse Incharge, Phase 8). Derived from the batch's RCN
+ * Receipts and its closing, never typed.
  */
-export type BatchStatus = "open" | "in_process";
+export type BatchStatus = "open" | "in_process" | "closed";
 
-export const BATCH_STATUS_LABELS: Record<BatchStatus, string> = { open: "Waiting for first load", in_process: "In production" };
+export const BATCH_STATUS_LABELS: Record<BatchStatus, string> = { open: "Waiting for first load", in_process: "In production", closed: "Closed" };
 
-export function batchStatus(rcnReceiptCount: number): BatchStatus {
+export function batchStatus(rcnReceiptCount: number, closed = false): BatchStatus {
+  if (closed) return "closed";
   return rcnReceiptCount > 0 ? "in_process" : "open";
 }

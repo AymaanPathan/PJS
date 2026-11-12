@@ -23,9 +23,9 @@ const pct = (n: number) => `${n.toFixed(2)} %`;
 /** Phase 4: first what is one Lot's (its day record, line runs and checks), then what is the factory's (shell silo, trucks). */
 export function ShellingSection({ data, can, onChanged }: { data: BatchLots; can: LotPermissions; onChanged: () => void }) {
   const [pickedCode, setPickedCode] = useState<string | null>(null);
-  const lots = data.lots.filter((l) => canShell(l.status));
+  const lots = data.lots.filter((l) => canShell(l.earlyStatus));
   // The oldest Lot with no day record yet, else the newest.
-  const lot = lots.find((l) => l.code === pickedCode) ?? lots.find((l) => l.status === "ready") ?? lots.at(-1) ?? null;
+  const lot = lots.find((l) => l.code === pickedCode) ?? lots.find((l) => l.earlyStatus === "ready") ?? lots.at(-1) ?? null;
   const waitingOnCooling = data.lots.length - lots.length;
   const count = (kind: string) => lot?.entries.filter((e) => e.kind === kind && e.status !== "rejected").length ?? 0;
   // QC-5 has two halves, and the step is done only with a record of each.

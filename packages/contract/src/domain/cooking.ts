@@ -72,6 +72,14 @@ export interface CoolingValues {
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 export const isTime = (v: string | undefined | null): boolean => TIME_RE.test((v ?? "").trim());
 
+/** Hours from one "HH:MM" to another on the same shift; past midnight when the end is earlier. */
+export function durationHours(start: string | undefined, end: string | undefined): number | null {
+  if (!isTime(start) || !isTime(end)) return null;
+  const mins = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+  const d = mins(end!.trim()) - mins(start!.trim());
+  return (d < 0 ? d + 1440 : d) / 60;
+}
+
 export function coolingError(v: CoolingValues): string | null {
   if (!(v.silo ?? "").trim()) return "Enter the cooling silo.";
   if (!(v.date ?? "").trim()) return "A date is required.";
@@ -116,8 +124,18 @@ export function coolingCheck(qc4: CheckLike[]): CoolingCheckState {
   return !decided ? "not_checked" : decided.decision === "ok" ? "ok" : "wait";
 }
 
-/** The doc's Lot statuses as far as Colour sort, plus its step 5 "Ready for shelling". Worked out from the records, never typed. */
-export type LotStatus = "cooking" | "cooling" | "ready" | "shelled" | "colour_sorted";
+/**
+ * The doc's Lot statuses as far as Colour sort, plus its step 5 "Ready for shelling". Worked out from the records, never
+ * typed. Phases 4 and 5 read this one for what they allow (shelling only after QC-4), whatever later phase the Lot has
+ * records in.
+ */
+export type EarlyLotStatus = "cooking" | "cooling" | "ready" | "shelled" | "colour_sorted";
+
+/** Phases 6–8 (domain/laterPhases.ts works out which): the furthest phase with a record. */
+export type LaterLotStatus = "in_borma" | "humidified" | "peeled" | "graded" | "packed" | "qc11_passed" | "dispatched";
+
+/** A Lot's one status, as the run and the Lot lists show it. */
+export type LotStatus = EarlyLotStatus | LaterLotStatus;
 
 export const LOT_STATUS_LABELS: Record<LotStatus, string> = {
   cooking: "Cooking",
@@ -125,19 +143,26 @@ export const LOT_STATUS_LABELS: Record<LotStatus, string> = {
   ready: "Ready for shelling",
   shelled: "Shelled",
   colour_sorted: "Colour sorted",
+  in_borma: "In Borma",
+  humidified: "Humidified",
+  peeled: "Peeled",
+  graded: "Graded",
+  packed: "Packed",
+  qc11_passed: "QC-11 passed",
+  dispatched: "Dispatched",
 };
 
-export function lotStatus(v: { inCooling: boolean; cooling: CoolingCheckState; shellingDays: number; colourSorted?: boolean }): LotStatus {
+export function lotStatus(v: { inCooling: boolean; cooling: CoolingCheckState; shellingDays: number; colourSorted?: boolean }): EarlyLotStatus {
   if (v.shellingDays > 0) return v.colourSorted ? "colour_sorted" : "shelled";
   if (!v.inCooling) return "cooking";
   return v.cooling === "ok" ? "ready" : "cooling";
 }
 
 /** Past QC-4, so anything of Phase 4 may be recorded on it. */
-export const canShell = (status: LotStatus): boolean => status === "ready" || status === "shelled" || status === "colour_sorted";
+export const canShell = (status: EarlyLotStatus): boolean => status === "ready" || status === "shelled" || status === "colour_sorted";
 
 /** Shelled, so the sorter has its kernels: Phase 5 may be recorded on it. */
-export const canColourSort = (status: LotStatus): boolean => status === "shelled" || status === "colour_sorted";
+export const canColourSort = (status: EarlyLotStatus): boolean => status === "shelled" || status === "colour_sorted";
 
 export type CookingStep = "cook" | "cooker_log" | "qc3" | "cooling" | "qc4" | "none";
 

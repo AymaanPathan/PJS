@@ -1,6 +1,6 @@
 /**
- * The production workbook's tabs: Phases 1 to 5, one tab per thing a person records, in the order they happen. A
- * later phase (Borma, …) is a new tab here when it is built; a Lot's small records come from its definitions.
+ * The production workbook's tabs: Phases 1 to 8, one tab per thing a person records, in the order they happen. A
+ * Lot's records (Phases 3–8) come from their definitions in the contract's domain/lotEntries.ts.
  *
  * Column words follow the client's own sheets — "2. Input RCN Quality report" for a moisture check, the
  * "RCN Receipts Tally Sheet" for pallets, "5. Calibrated RCN Silos Stock report" for the sizes, "24. Wholes Manual
@@ -14,7 +14,7 @@
  */
 import { SILO_SIZES, SIZING_GRADES, type SizingGrade } from "@anagroci/contract/domain/calibration";
 import { STREAMS } from "@anagroci/contract/domain/byProducts";
-import { ENTRY_DEFS, ENTRY_KINDS, type EntryKind } from "@anagroci/contract/domain/lotEntries";
+import { ENTRY_DEFS, ENTRY_KINDS, entryFigures, type EntryField, type EntryKind } from "@anagroci/contract/domain/lotEntries";
 
 export interface TabField {
   key: string;
@@ -53,6 +53,17 @@ const SAMPLE_GRAMS: TabField[] = SIZING_GRADES.map((g) => ({ key: gramKey(g), la
 
 const LOT_LINK: TabField = { key: "lotCode", label: "Lot No" };
 
+/** How to fill a column in, on its header. A long list (the 181 packing grades) is described, not spelled out. */
+function fieldNote(f: EntryField): string | undefined {
+  if (f.type === "size") return "The size: A++, A+, A, AB, B, BC, C, D or DE.";
+  if (f.options && f.options.length > 20) return `One of the ${f.options.length} grades of the finished-goods master, written exactly as it, e.g. ${f.options.find((o) => o.startsWith("Borma")) ?? f.options[0]}.`;
+  if (f.options) return f.options.join(", ");
+  return f.hint;
+}
+
+/** The figures the app works out for a record (net, loss %, totals …): shown in the file, never read back. */
+export const figureKey = (i: number) => `fig_${i}`;
+
 function entryTab(kind: EntryKind): Tab {
   const def = ENTRY_DEFS[kind];
   return {
@@ -65,11 +76,9 @@ function entryTab(kind: EntryKind): Tab {
       { key: "id", label: "Entry ID" },
       LOT_LINK,
       { key: "date", label: "Date" },
-      ...def.fields.map((f) => ({
-        key: `v_${f.key}`, label: f.label, time: f.type === "time",
-        note: f.type === "size" ? "The size: A++, A+, A, AB, B, BC, C, D or DE." : f.options ? f.options.join(", ") : undefined,
-      })),
+      ...def.fields.map((f) => ({ key: `v_${f.key}`, label: f.label, time: f.type === "time", note: fieldNote(f) })),
       ...(def.decision ? [{ key: "decision", label: "Result", note: `${def.decision.ok}, or ${def.decision.noValue === "wait" ? "Wait" : "No"}.` }] : []),
+      ...entryFigures(kind, {}).map((fig, i) => ({ key: figureKey(i), label: fig.label, derived: true })),
       ...(def.who === "qfs" ? [{ key: "status", label: "Approval", derived: true }] : []),
     ],
   };
@@ -279,6 +288,23 @@ export const TABS: Tab[] = [
   entryTab("qc6"),
   entryTab("qc7_before"),
   entryTab("qc7_after"),
+  // Phase 6 · Borma
+  entryTab("borma_trolley"),
+  entryTab("borma_oven"),
+  entryTab("qc8"),
+  // Phase 7 · Humidification, peeling & grading
+  entryTab("humidification"),
+  entryTab("qc10"),
+  entryTab("peeling"),
+  entryTab("winnowing"),
+  entryTab("grading"),
+  entryTab("worker_output"),
+  entryTab("qc12"),
+  // Phase 8 · Packing & dispatch
+  entryTab("packing"),
+  entryTab("qc9"),
+  entryTab("qc11"),
+  entryTab("fg_dispatch"),
   {
     id: "boiler",
     title: "Boiler",
@@ -319,6 +345,7 @@ export const TABS: Tab[] = [
 ];
 // A guard for `ENTRY_KINDS`: every kind has its tab above, or its records could never be uploaded or exported.
 for (const kind of ENTRY_KINDS) if (!TABS.some((t) => t.id === `entry:${kind}`)) throw new Error(`No workbook tab for ${kind}`);
+
 
 /**
  * A header as this workbook matches it. Keeps + < > where the shared normalizeHeader drops them: the client's size

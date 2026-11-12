@@ -8,11 +8,24 @@
  * `who: "qfs"` is a quality check: a QFS Officer's waits for the Incharge, an Incharge's or Admin's is approved as it
  * is saved. `who: "floor"` is the floor's own record: the Incharge's or Admin's for now (Data Entry later).
  */
-import { COOLING_HOURS, hoursBetween, isTime } from "./cooking.js";
+import { COOLING_HOURS, durationHours, hoursBetween, isTime } from "./cooking.js";
+
+export { durationHours };
 import { SILO_SIZES, siloFromWord, siloLabel, type SiloSize } from "./calibration.js";
 import { SORTER_SIZE_GROUPS, SORTER_STREAMS, sorterFigures } from "./colourSort.js";
+import { BORMA_ENTRY_DEFS } from "./borma.js";
+import { PEELING_ENTRY_DEFS } from "./peeling.js";
+import { PACKING_ENTRY_DEFS } from "./packing.js";
 
-export const ENTRY_KINDS = ["cooker_log", "qc3", "qc4", "waste_water", "line_run", "qc5_frequency", "qc5_capacity", "qty1", "qc6", "qc7_before", "qc7_after"] as const;
+export const ENTRY_KINDS = [
+  "cooker_log", "qc3", "qc4", "waste_water", "line_run", "qc5_frequency", "qc5_capacity", "qty1", "qc6", "qc7_before", "qc7_after",
+  // Phase 6 · Borma (domain/borma.ts)
+  "borma_trolley", "borma_oven", "qc8",
+  // Phase 7 · Humidification, peeling & grading (domain/peeling.ts)
+  "humidification", "qc10", "peeling", "winnowing", "grading", "worker_output", "qc12",
+  // Phase 8 · Packing & dispatch (domain/packing.ts)
+  "packing", "qc9", "qc11", "fg_dispatch",
+] as const;
 export type EntryKind = (typeof ENTRY_KINDS)[number];
 
 /** The 14 cutting lines, as the sheets name them; the doc: "14 cutting lines open the shells". */
@@ -84,13 +97,6 @@ const sum = (v: Values, keys: string[]) => keys.reduce((n, k) => n + n0(v[k]), 0
 const pct = (n: number, digits = 1) => `${n.toFixed(digits)} %`;
 const fmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 
-/** Hours from one "HH:MM" to another on the same shift; past midnight when the end is earlier. */
-export function durationHours(start: string | undefined, end: string | undefined): number | null {
-  if (!isTime(start) || !isTime(end)) return null;
-  const mins = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
-  const d = mins(end!.trim()) - mins(start!.trim());
-  return (d < 0 ? d + 1440 : d) / 60;
-}
 const hrs = (h: number | null) => (h === null ? "-" : `${h.toFixed(2)} h`);
 
 /** The sheet's own factor for Kernel lbs: 176.36, to the last decimal on its rows. */
@@ -318,7 +324,26 @@ export const ENTRY_DEFS: Record<EntryKind, EntryDef> = {
     help: "A 1,000 g sample of one stream coming out of the sorter. One check for each stream: wholes, pieces, and rejection + oil.",
     fields: SORTER_FIELDS, figures: sorterFigureList, notes: sorterNotes,
   },
+  ...BORMA_ENTRY_DEFS,
+  ...PEELING_ENTRY_DEFS,
+  ...PACKING_ENTRY_DEFS,
 };
+
+/**
+ * Which phase of the run each kind belongs to. Phases 6 to 8 take their records on any Lot of the run, in any order:
+ * nothing waits for an earlier phase to finish — a failed check only shows, and its result is what counts.
+ */
+export const ENTRY_PHASE: Record<EntryKind, number> = {
+  cooker_log: 3, qc3: 3, qc4: 3, waste_water: 3,
+  line_run: 4, qc5_frequency: 4, qc5_capacity: 4, qty1: 4, qc6: 4,
+  qc7_before: 5, qc7_after: 5,
+  borma_trolley: 6, borma_oven: 6, qc8: 6,
+  humidification: 7, qc10: 7, peeling: 7, winnowing: 7, grading: 7, worker_output: 7, qc12: 7,
+  packing: 8, qc9: 8, qc11: 8, fg_dispatch: 8,
+};
+
+/** The floor's own records can be corrected (a Borma trolley is weighed after the oven, hours after its line). A quality check stays as recorded. */
+export const isEditableKind = (kind: EntryKind): boolean => ENTRY_DEFS[kind].who === "floor";
 
 /** Recorded on a Lot only once it is shelled: the sorter works on what shelling gave. */
 export const AFTER_SHELLING: EntryKind[] = ["qc7_before", "qc7_after"];
@@ -373,7 +398,9 @@ export function entryError(kind: EntryKind, v: EntryValues, sizes?: SiloSize[]):
     }
     if (f.type === "time" && !isTime(t)) return `${f.label} must be a time, as HH:MM.`;
     if (f.type === "line" && !SHELLING_LINES.includes(t)) return `${t} is not one of the 14 lines.`;
-    if (f.type === "select" && !f.options!.includes(t)) return `${f.label} must be one of ${f.options!.join(", ")}.`;
+    if (f.type === "select" && !f.options!.includes(t)) {
+      return f.options!.length > 20 ? `${f.label} must be one of the ${f.options!.length} in the list ("${t}" isn't).` : `${f.label} must be one of ${f.options!.join(", ")}.`;
+    }
     if (f.type === "size") {
       if (!SILO_SIZES.some((s) => s.key === t)) return `${t} is not one of the 9 sizes.`;
       if (sizes && kind !== "line_run" && !sizes.includes(t as SiloSize)) return `This Lot cooked no size ${siloLabel(t as SiloSize)}.`;

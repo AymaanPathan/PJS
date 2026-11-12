@@ -21,16 +21,16 @@ const pct = (n: number | undefined) => (n === undefined ? "-" : `${n.toFixed(1)}
  */
 export function ColourSortSection({ data, can, onChanged }: { data: BatchLots; can: LotPermissions; onChanged: () => void }) {
   const [pickedCode, setPickedCode] = useState<string | null>(null);
-  const lots = data.lots.filter((l) => canColourSort(l.status));
+  const lots = data.lots.filter((l) => canColourSort(l.earlyStatus));
   // The oldest Lot not sorted yet, else the newest.
-  const lot = lots.find((l) => l.code === pickedCode) ?? lots.find((l) => l.status === "shelled") ?? lots.at(-1) ?? null;
+  const lot = lots.find((l) => l.code === pickedCode) ?? lots.find((l) => l.earlyStatus === "shelled") ?? lots.at(-1) ?? null;
   const notShelled = data.lots.length - lots.length;
   const of = (kind: string) => lot?.entries.filter((e) => e.kind === kind && e.status !== "rejected") ?? [];
   const waiting = lot?.entries.filter((e) => (e.kind === "qc7_before" || e.kind === "qc7_after") && e.status === "submitted") ?? [];
   const step = lot ? nextColourSortStep({ canCheck: can.canCheck, beforeSamples: of("qc7_before").length, streams: lot.sorterStreams, checks: lot.sortChecks }) : "none";
   const resort = lot?.sorterStreams.filter((s) => lot.sortChecks[s] === "resort") ?? [];
   const blackStore = data.stores.find((s) => s.stream === "black_rejection")!;
-  const done = lot?.status === "colour_sorted" && waiting.length === 0;
+  const done = lot?.earlyStatus === "colour_sorted" && waiting.length === 0;
 
   const nextText = !lot
     ? (notShelled > 0 ? `No Lot is ready to sort yet. A Lot arrives here once its day record is entered in Shelling.` : "Nothing to do yet. A Lot arrives here once it is shelled.")
@@ -73,7 +73,7 @@ export function ColourSortSection({ data, can, onChanged }: { data: BatchLots; c
           <StepCard n={1} title="Sample before the sorter" status={`${of("qc7_before").length} sample${of("qc7_before").length === 1 ? "" : "s"}`} active={step === "before"} done={of("qc7_before").length > 0}>
             <EntryList kind="qc7_before" lot={lot} can={can} onChanged={onChanged} />
           </StepCard>
-          <StepCard n={2} title="Quality after the sorter (QC-7)" status={lot.sorterStreams.every((s) => lot.sortChecks[s] === "ok") ? "Every stream passed" : `${lot.sorterStreams.filter((s) => lot.sortChecks[s] !== "ok").length} of ${lot.sorterStreams.length} streams still to pass`} active={step === "after"} done={lot.status === "colour_sorted"}>
+          <StepCard n={2} title="Quality after the sorter (QC-7)" status={lot.sorterStreams.every((s) => lot.sortChecks[s] === "ok") ? "Every stream passed" : `${lot.sorterStreams.filter((s) => lot.sortChecks[s] !== "ok").length} of ${lot.sorterStreams.length} streams still to pass`} active={step === "after"} done={lot.earlyStatus === "colour_sorted"}>
             <ul className="flex flex-wrap gap-2 mb-3">
               {lot.sorterStreams.map((s) => (
                 <li key={s} className="flex items-center gap-2 rounded-xl border border-warmstone-200 px-3 py-2 text-[13px] text-warmstone-800">

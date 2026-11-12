@@ -86,11 +86,11 @@ afterAll(async () => {
 });
 
 describe("the sample", () => {
-  it("is one file with a tab per step of Phases 1 to 5, headers only", async () => {
+  it("is one file with a tab per step of Phases 1 to 8, headers only", async () => {
     const built = await downloadProductionWorkbook(SITE, {}, true);
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(built.buffer as ArrayBuffer);
-    expect(wb.worksheets.map((w) => w.name)).toEqual(["Batches", "RCN Receipts", "Moisture Checks", "Pallets", "Final Weight", "Calibration Runs", "Silo Checks", "Silo Moves", "Cooking", "Cooker Log", "Cooking Checks", "Waste Water", "Cooling", "Cooling Checks", "Shelling Days", "Line Runs", "Machine Frequency", "Machine Samples", "Uncut Checks", "Shell Samples", "Sorter Before", "Sorter After", "Boiler", "Trucks"]);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(["Batches", "RCN Receipts", "Moisture Checks", "Pallets", "Final Weight", "Calibration Runs", "Silo Checks", "Silo Moves", "Cooking", "Cooker Log", "Cooking Checks", "Waste Water", "Cooling", "Cooling Checks", "Shelling Days", "Line Runs", "Machine Frequency", "Machine Samples", "Uncut Checks", "Shell Samples", "Sorter Before", "Sorter After", "Borma Trolleys", "Borma Ovens", "Borma Quality", "Humidification", "Humidity Checks", "Peeling", "Husk Winnowing", "Grading", "Peeling Workers", "In-process Checks", "Packing", "Pre-fill Checks", "Final Checks", "FG Dispatch", "Boiler", "Trucks"]);
     expect(wb.worksheets.every((w) => w.actualRowCount === 1)).toBe(true);
     expect(built.filename).toBe("ANAGROCI - Production - Sample.xlsx");
   });

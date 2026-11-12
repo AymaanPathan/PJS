@@ -42,6 +42,9 @@ export interface BatchSummary {
   days: number;
   endDate: string | null;
   binCodes: string[];
+  /** Set once the Warehouse Incharge has closed the run (Phase 8). */
+  closedAt: string | null;
+  closedBy: string | null;
 }
 
 export interface BatchHistoryEntry {

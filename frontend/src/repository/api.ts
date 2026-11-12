@@ -407,7 +407,7 @@ export const api = {
   approveSizingCheck: (checkId: number) => request<SizingCheck>(prod(`/production/sizing-checks/${checkId}/approve`), { method: "POST" }),
   rejectSizingCheck: (checkId: number, reason: string) =>
     request<SizingCheck>(prod(`/production/sizing-checks/${checkId}/reject`), { method: "POST", body: JSON.stringify({ reason }) }),
-  // ── Production Phases 3–4: Lots, by-products and the boiler. ──
+  // ── Production Phases 3–8: Lots, by-products and the boiler. ──
   getBatchLots: (code: string) => request<BatchLots>(prod(`/production/batches/${encodeURIComponent(code)}/lots`)),
   cookFactoryLot: (r: CookRunInput) => request<LotView>(prod("/production/factory-lots"), { method: "POST", body: JSON.stringify(r) }),
   deleteCookRun: (id: number) => request<void>(prod(`/production/lot-cook-runs/${id}`), { method: "DELETE" }),
@@ -417,6 +417,9 @@ export const api = {
   rejectLotEntry: (id: number, reason: string) => request<LotView>(prod(`/production/lot-entries/${id}/reject`), { method: "POST", body: JSON.stringify({ reason }) }),
   approveAllLotEntries: (code: string, kind: string) => request<LotView>(prod(`/production/factory-lots/${encodeURIComponent(code)}/entries/approve-all`), { method: "POST", body: JSON.stringify({ kind }) }),
   deleteLotEntry: (id: number) => request<void>(prod(`/production/lot-entries/${id}`), { method: "DELETE" }),
+  updateLotEntry: (id: number, e: LotEntryInput) => request<LotView>(prod(`/production/lot-entries/${id}`), { method: "PUT", body: JSON.stringify(e) }),
+  closeProductionRun: (code: string) => request<BatchDetail>(prod(`/production/batches/${encodeURIComponent(code)}/close`), { method: "POST" }),
+  reopenProductionRun: (code: string) => request<BatchDetail>(prod(`/production/batches/${encodeURIComponent(code)}/reopen`), { method: "POST" }),
   addShellingDay: (code: string, d: ShellingDayInput) => request<LotView>(prod(`/production/factory-lots/${encodeURIComponent(code)}/shelling-days`), { method: "POST", body: JSON.stringify(d) }),
   deleteShellingDay: (id: number) => request<void>(prod(`/production/shelling-days/${id}`), { method: "DELETE" }),
   addTruck: (t: TruckInput) => request<TruckView>(prod("/production/trucks"), { method: "POST", body: JSON.stringify(t) }),
